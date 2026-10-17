@@ -335,7 +335,7 @@
     <string name="Superscript">Superscript</string>
     <string name="Regular">Regular</string>
     <string name="FormattedDate">Date</string>
-    <string name="ContactsPermissionAlert">**Telegram** needs access to your contacts so that you can connect with your friends across all your devices. Your contacts will be continuously synced with Telegram\'s heavily encrypted cloud servers.</string>
+    <string name="ContactsPermissionAlert">**TrueGram** needs access to your contacts so that you can connect with your friends across all your devices. Your contacts will be continuously synced with Telegram\'s heavily encrypted cloud servers.</string>
     <string name="ContactsPermissionAlertNotNow">Not now</string>
     <string name="ContactsPermissionAlertContinue">Continue</string>
     <string name="NotificationsPermissionAlertTitle">Turn on notifications</string>
@@ -345,7 +345,7 @@
     <string name="NotificationsPermissionAlert3">Mute specific chats and types of chats</string>
     <string name="NotificationsPermissionContinue">Continue</string>
     <string name="NotificationsPermissionSettings">Open Settings</string>
-    <string name="YourContacts">Your contacts on Telegram</string>
+    <string name="YourContacts">Your contacts on TrueGram</string>
     <string name="ConnectingYourContacts">Connecting your contacts...</string>
     <string name="ArchiveHintHeader1">This is your Archive</string>
     <string name="ArchiveHintText1">Chats with enabled notifications get unarchived when new messages arrive.</string>
@@ -643,9 +643,9 @@
     <string name="ChannelInviteViaLink">Invite via Link</string>
     <string name="ChannelRemoveUserAdmin">Dismiss admin</string>
     <string name="ChannelEditPermissions">Edit permissions</string>
-    <string name="ChannelAntiSpamUser">Telegram Anti-Spam</string>
+    <string name="ChannelAntiSpamUser">TrueGram Anti-Spam</string>
     <string name="ChannelAntiSpam">Aggressive Anti-Spam</string>
-    <string name="ChannelAntiSpamInfo">Telegram will filter more spam, but may occasionally affect ordinary messages. You can report False Positives in Recent Actions.</string>
+    <string name="ChannelAntiSpamInfo">TrueGram will filter more spam, but may occasionally affect ordinary messages. You can report False Positives in Recent Actions.</string>
     <string name="ChannelAntiSpamInfo2">You can manage anti-spam settings in %s</string>
     <string name="ChannelHideMembers">Hide Members</string>
     <string name="ChannelHideMembersInfo">Switch on to hide the list of members in this group. Admins will remain visible.</string>
@@ -653,7 +653,7 @@
     <string name="ChannelMemberTagsInfo">Turn this on to let members of the group to add short tags next to their names.</string>
     <string name="ChannelAntiSpamFalsePositiveReported">Telegram moderators will review your report. Thank you!</string>
     <string name="ChannelMembersInfo">Only channel administrators can see this list.</string>
-    <string name="ChannelLinkInfo">Anyone on Telegram will be able to join your channel by following this link.</string>
+    <string name="ChannelLinkInfo">Anyone on TrueGram will be able to join your channel by following this link.</string>
     <string name="ChannelAdminsInfo">You can add administrators to help you manage your channel. Tap and hold to remove admins.</string>
     <string name="ChannelCantOpenPrivate">Sorry, this channel is private, so you can’t view its content.</string>
     <string name="ChannelCantOpenPrivate2">Sorry, this channel is private.</string>
