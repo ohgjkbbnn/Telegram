@@ -1,0 +1,176 @@
+package org.telegram.ui;
+
+import android.content.Context;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import org.telegram.messenger.TrueGramConfig;
+import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeDescription;
+import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.TextCheckCell;
+import org.telegram.ui.Cells.TextInfoPrivacyCell;
+import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.messenger.R;
+
+import java.util.ArrayList;
+
+public class TrueGramSettingsActivity extends BaseFragment {
+
+    private RecyclerListView listView;
+    private ListAdapter listAdapter;
+
+    private int rowCount;
+    private int headerRow;
+    private int saveDeletedRow;
+    private int saveDeletedInfoRow;
+
+    private void updateRows() {
+        rowCount = 0;
+        headerRow = rowCount++;
+        saveDeletedRow = rowCount++;
+        saveDeletedInfoRow = rowCount++;
+    }
+
+    @Override
+    public boolean onFragmentCreate() {
+        updateRows();
+        return super.onFragmentCreate();
+    }
+
+    @Override
+    public View createView(Context context) {
+        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        actionBar.setAllowOverlayTitle(true);
+        actionBar.setTitle("TrueGram");
+        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+            @Override
+            public void onItemClick(int id) {
+                if (id == -1) {
+                    finishFragment();
+                }
+            }
+        });
+
+        listAdapter = new ListAdapter(context);
+
+        fragmentView = new FrameLayout(context);
+        FrameLayout frameLayout = (FrameLayout) fragmentView;
+        frameLayout.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
+
+        listView = new RecyclerListView(context);
+        listView.setSections();
+        actionBar.setAdaptiveBackground(listView);
+        listView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false) {
+            @Override
+            public boolean supportsPredictiveItemAnimations() {
+                return false;
+            }
+        });
+        listView.setVerticalScrollBarEnabled(false);
+        listView.setLayoutAnimation(null);
+        listView.setItemAnimator(null);
+        frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        listView.setAdapter(listAdapter);
+        listView.setOnItemClickListener((view, position) -> {
+            if (position == saveDeletedRow) {
+                final boolean enabled = !TrueGramConfig.isSaveDeletedEnabled();
+                TrueGramConfig.setSaveDeletedEnabled(enabled);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(enabled);
+                }
+            }
+        });
+
+        return fragmentView;
+    }
+
+    private class ListAdapter extends RecyclerListView.SelectionAdapter {
+
+        private final Context mContext;
+
+        public ListAdapter(Context context) {
+            mContext = context;
+        }
+
+        @Override
+        public boolean isEnabled(RecyclerView.ViewHolder holder) {
+            return holder.getAdapterPosition() == saveDeletedRow;
+        }
+
+        @Override
+        public int getItemCount() {
+            return rowCount;
+        }
+
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view;
+            switch (viewType) {
+                case 0:
+                    view = new HeaderCell(mContext);
+                    break;
+                case 1:
+                    view = new TextCheckCell(mContext);
+                    break;
+                case 2:
+                default:
+                    view = new TextInfoPrivacyCell(mContext);
+                    break;
+            }
+            return new RecyclerListView.Holder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+            switch (holder.getItemViewType()) {
+                case 0: {
+                    HeaderCell headerCell = (HeaderCell) holder.itemView;
+                    headerCell.setText("Сообщения");
+                    break;
+                }
+                case 1: {
+                    TextCheckCell cell = (TextCheckCell) holder.itemView;
+                    cell.setTextAndCheck("Читать удалённые сообщения", TrueGramConfig.isSaveDeletedEnabled(), false);
+                    break;
+                }
+                case 2: {
+                    TextInfoPrivacyCell cell = (TextInfoPrivacyCell) holder.itemView;
+                    cell.setText("Если собеседник удалит сообщение, оно останется у вас в чате с значком корзины рядом со временем. Одноразовые сообщения и сообщения с таймером не сохраняются.");
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            if (position == headerRow) {
+                return 0;
+            } else if (position == saveDeletedRow) {
+                return 1;
+            }
+            return 2;
+        }
+    }
+
+    @Override
+    public ArrayList<ThemeDescription> getThemeDescriptions() {
+        ArrayList<ThemeDescription> themeDescriptions = new ArrayList<>();
+        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_CELLBACKGROUNDCOLOR, new Class[]{HeaderCell.class, TextCheckCell.class}, null, null, null, Theme.key_windowBackgroundWhite));
+        themeDescriptions.add(new ThemeDescription(fragmentView, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundGray));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{HeaderCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlueHeader));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextCheckCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteBlackText));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextCheckCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_switchTrack));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextCheckCell.class}, new String[]{"checkBox"}, null, null, null, Theme.key_switchTrackChecked));
+        themeDescriptions.add(new ThemeDescription(listView, ThemeDescription.FLAG_BACKGROUNDFILTER, new Class[]{TextInfoPrivacyCell.class}, null, null, null, Theme.key_windowBackgroundGrayShadow));
+        themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{TextInfoPrivacyCell.class}, new String[]{"textView"}, null, null, null, Theme.key_windowBackgroundWhiteGrayText4));
+        return themeDescriptions;
+    }
+}
