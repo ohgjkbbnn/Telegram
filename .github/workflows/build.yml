@@ -18,16 +18,17 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
 
-      - name: List tasks
-        run: |
-          chmod +x gradlew
-          ./gradlew :TMessagesProj_AppStandalone:tasks --all --no-daemon | grep -i assemble || true
-
       - name: Build arm64 debug
         run: |
-          ./gradlew :TMessagesProj_AppStandalone:assembleDebug \
-            -Pandroid.injected.build.abi=arm64-v8a \
-            --no-daemon
+          chmod +x gradlew
+          for i in 1 2 3; do
+            ./gradlew :TMessagesProj_AppStandalone:assembleDebug \
+              -Pandroid.injected.build.abi=arm64-v8a \
+              --no-daemon && exit 0
+            echo "Попытка $i не удалась, повтор через 60 с"
+            sleep 60
+          done
+          exit 1
 
       - name: Find APK
         run: find . -name "*.apk" -type f
