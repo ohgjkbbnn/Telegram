@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Washington</string>
-    <string name="AppNameBeta">Washington</string>
+    <string name="AppName">TrueGram</string>
+    <string name="AppNameBeta">TrueGram</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -209,18 +209,18 @@
     <string name="CheckYourNewEmailSubtitle">Введите код, который пришёл на указанный Вами адрес %1$s.</string>
     <string name="LoginOrSingInWithGoogle">или</string>
     <!--Intro view-->
-    <string name="Page1Title">Washington Gram</string>
+    <string name="Page1Title">TrueGram</string>
     <string name="Page2Title">Быстрый</string>
     <string name="Page3Title">Бесплатный</string>
     <string name="Page4Title">Безопасный</string>
     <string name="Page5Title">Мощный</string>
     <string name="Page6Title">Облачный</string>
     <string name="Page1Message">Самый **быстрый** мессенджер в мире.\n**Бесплатный** и **безопасный**.</string>
-    <string name="Page2Message">**Washington** доставляет сообщения быстрее\nлюбого другого приложения.</string>
-    <string name="Page3Message">**Washington** предоставляет бесплатное безлимитное облачное хранилище для чатов и медиа.\n</string>
-    <string name="Page4Message">**Washington** защищает Вашу переписку от злоумышленников.</string>
-    <string name="Page5Message">**Washington** не ограничивает размер\n Ваших медиафайлов и чатов.</string>
-    <string name="Page6Message">В **Washington** можно переписываться с любого количества устройств.</string>
+    <string name="Page2Message">**TrueGram** доставляет сообщения быстрее\nлюбого другого приложения.</string>
+    <string name="Page3Message">**TrueGram** предоставляет бесплатное безлимитное облачное хранилище для чатов и медиа.\n</string>
+    <string name="Page4Message">**TrueGram** защищает Вашу переписку от злоумышленников.</string>
+    <string name="Page5Message">**TrueGram** не ограничивает размер\n Ваших медиафайлов и чатов.</string>
+    <string name="Page6Message">В **TrueGram** можно переписываться с любого количества устройств.</string>
     <string name="StartMessaging">Начать общение</string>
     <!--date formatters-->
     <string name="formatterBoostExpired">dd MMM yyyy</string>
