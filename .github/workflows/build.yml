@@ -14,16 +14,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install NDK/CMake
+      - name: Accept licenses
         run: |
-          SDKM=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          yes | $SDKM --licenses > /dev/null || true
-          $SDKM "ndk;21.4.7075529" "cmake;3.10.2.4988404" "platforms;android-35" "build-tools;35.0.0"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
 
-      - name: Build arm64 only
+      - name: List tasks
         run: |
           chmod +x gradlew
-          ./gradlew :TMessagesProj_AppStandalone:assembleAfatStandaloneDebug \
+          ./gradlew :TMessagesProj_AppStandalone:tasks --all --no-daemon | grep -i assemble || true
+
+      - name: Build arm64 debug
+        run: |
+          ./gradlew :TMessagesProj_AppStandalone:assembleDebug \
             -Pandroid.injected.build.abi=arm64-v8a \
             --no-daemon
 
