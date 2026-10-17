@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Washington</string>
-    <string name="AppNameBeta">Washington</string>
+    <string name="AppName">TrueGram</string>
+    <string name="AppNameBeta">TrueGram</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
