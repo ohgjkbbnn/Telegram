@@ -23,6 +23,11 @@ jobs:
           sed -i -E 's/^APP_PACKAGE *=.*/APP_PACKAGE=com.truegram/' gradle.properties
           grep -n "APP_PACKAGE" gradle.properties
 
+      - name: Restore signing key
+        run: |
+          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > TMessagesProj/config/release.keystore
+          ls -l TMessagesProj/config/release.keystore
+
       - name: Apply custom icon
         run: |
           set -e
@@ -58,6 +63,10 @@ jobs:
           done
 
       - name: Build arm64 debug
+        env:
+          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.KS_PASS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.KS_ALIAS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASS }}
         run: |
           chmod +x gradlew
           for i in 1 2 3; do
@@ -70,15 +79,24 @@ jobs:
           exit 1
 
       - name: Find APK
-        run: find . -name "*.apk" -type f
+        run: find . -path "*build/outputs/apk*" -name "*.apk" -type f
 
       - name: Show icon and package
         run: |
-          APK=$(find . -name "*.apk" | head -1)
+          APK=$(find . -path "*build/outputs/apk*" -name "*.apk" | head -1)
           $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | grep -m3 "package:\|application-icon"
+
+      - name: Diagnose APK
+        run: |
+          BT=$ANDROID_HOME/build-tools/36.0.0
+          APK=$(find . -path "*build/outputs/apk*" -name "*.apk" | head -1)
+          echo "=== $APK"
+          $BT/apksigner verify -v --print-certs "$APK" | head -15 || true
+          $BT/zipalign -c -v 4 "$APK" | tail -3 || true
+          unzip -v "$APK" | grep -E "resources.arsc|AndroidManifest" || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: telegram-arm64-apk
-          path: "**/*.apk"
+          path: TMessagesProj_AppStandalone/build/outputs/apk/**/*.apk
           if-no-files-found: error
