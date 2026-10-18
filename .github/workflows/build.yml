@@ -79,17 +79,17 @@ jobs:
           exit 1
 
       - name: Find APK
-        run: find . -path "*build/outputs/apk*" -name "*.apk" -type f
+        run: find . -name "*.apk" -type f
 
       - name: Show icon and package
         run: |
-          APK=$(find . -path "*build/outputs/apk*" -name "*.apk" | head -1)
-          $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | grep -m3 "package:\|application-icon"
+          APK=$(find . -path "*intermediates/apk/afat/debug*" -name "*.apk" | head -1)
+          $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | grep -m3 "package:\|application-icon" || true
 
       - name: Diagnose APK
         run: |
           BT=$ANDROID_HOME/build-tools/36.0.0
-          APK=$(find . -path "*build/outputs/apk*" -name "*.apk" | head -1)
+          APK=$(find . -path "*intermediates/apk/afat/debug*" -name "*.apk" | head -1)
           echo "=== $APK"
           $BT/apksigner verify -v --print-certs "$APK" | head -15 || true
           $BT/zipalign -c -v 4 "$APK" | tail -3 || true
@@ -98,5 +98,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: telegram-arm64-apk
-          path: TMessagesProj_AppStandalone/build/outputs/apk/**/*.apk
+          path: "**/intermediates/apk/afat/debug/*.apk"
           if-no-files-found: error
