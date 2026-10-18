@@ -18,6 +18,45 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
 
+      - name: Set package name
+        run: |
+          sed -i -E 's/^APP_PACKAGE *=.*/APP_PACKAGE=com.truegram/' gradle.properties
+          grep -n "APP_PACKAGE" gradle.properties
+
+      - name: Apply custom icon
+        run: |
+          set -e
+          command -v convert >/dev/null || sudo apt-get install -y imagemagick
+          ICON=file_0000000047a881f4b2d2a66902d1511e.png
+          test -f "$ICON"
+          ALPHA=$(convert "$ICON" -format "%[fx:p{0,0}.a]" info:)
+          if [ "$(awk -v a="$ALPHA" 'BEGIN{print (a>0.5)?1:0}')" = "1" ]; then
+            BG="#$(convert "$ICON" -format "%[hex:p{0,0}]" info: | cut -c1-6)"
+          else
+            BG="#FFFFFF"
+          fi
+          echo "icon background: $BG"
+          S=TMessagesProj_AppStandalone/src/main/res
+          M=TMessagesProj/src/main/res
+          mkdir -p $M/values $S/mipmap-anydpi-v26 $M/mipmap-anydpi-v26
+          echo "<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><color name=\"truegram_icon_bg\">$BG</color></resources>" > $M/values/truegram_colors.xml
+          for pair in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            D=${pair%%:*}; REST=${pair#*:}; N=${REST%%:*}; F=${REST#*:}
+            R=$((N/2)); INNER=$((F*90/100))
+            mkdir -p $S/mipmap-$D $M/mipmap-$D
+            convert "$ICON" -resize ${N}x${N} PNG32:$S/mipmap-$D/ic_launcher_sa.png
+            convert "$ICON" -resize ${N}x${N} PNG32:$M/mipmap-$D/ic_launcher.png
+            convert "$ICON" -resize ${N}x${N} -alpha set \( -size ${N}x${N} xc:none -fill white -draw "circle $R,$R $R,0" \) -compose DstIn -composite PNG32:$M/mipmap-$D/ic_launcher_round.png
+            convert -size ${F}x${F} xc:none \( "$ICON" -resize ${INNER}x${INNER} \) -gravity center -composite PNG32:$M/mipmap-$D/truegram_fg.png
+          done
+          for X in $S/mipmap-anydpi-v26/ic_launcher_sa.xml $M/mipmap-anydpi-v26/ic_launcher.xml $M/mipmap-anydpi-v26/ic_launcher_round.xml; do
+            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+              '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">' \
+              '    <background android:drawable="@color/truegram_icon_bg"/>' \
+              '    <foreground android:drawable="@mipmap/truegram_fg"/>' \
+              '</adaptive-icon>' > "$X"
+          done
+
       - name: Build arm64 debug
         run: |
           chmod +x gradlew
@@ -32,6 +71,11 @@ jobs:
 
       - name: Find APK
         run: find . -name "*.apk" -type f
+
+      - name: Show icon and package
+        run: |
+          APK=$(find . -name "*.apk" | head -1)
+          $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | grep -m3 "package:\|application-icon"
 
       - uses: actions/upload-artifact@v4
         with:
