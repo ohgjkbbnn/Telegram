@@ -23,6 +23,11 @@ jobs:
           sed -i -E 's/^APP_PACKAGE *=.*/APP_PACKAGE=com.truegram/' gradle.properties
           grep -n "APP_PACKAGE" gradle.properties
 
+      - name: Restrict ABI to arm64
+        run: |
+          grep -rl 'abiFilters "armeabi-v7a"' --include=build.gradle . | xargs -r sed -i 's/abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"/abiFilters "arm64-v8a"/'
+          grep -rn "abiFilters" --include=build.gradle .
+
       - name: Restore signing key
         run: |
           echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > TMessagesProj/config/release.keystore
@@ -71,7 +76,6 @@ jobs:
           chmod +x gradlew
           for i in 1 2 3; do
             ./gradlew :TMessagesProj_AppStandalone:assembleDebug \
-              -Pandroid.injected.build.abi=arm64-v8a \
               --no-daemon && exit 0
             echo "Попытка $i не удалась, повтор через 60 с"
             sleep 60
@@ -83,20 +87,25 @@ jobs:
 
       - name: Show icon and package
         run: |
-          APK=$(find . -path "*intermediates/apk/afat/debug*" -name "*.apk" | head -1)
+          APK=$(find . -path "*build/outputs/apk/afat/debug*" -name "*.apk" | head -1)
           $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | grep -m3 "package:\|application-icon" || true
 
       - name: Diagnose APK
         run: |
           BT=$ANDROID_HOME/build-tools/36.0.0
-          APK=$(find . -path "*intermediates/apk/afat/debug*" -name "*.apk" | head -1)
+          APK=$(find . -path "*build/outputs/apk/afat/debug*" -name "*.apk" | head -1)
           echo "=== $APK"
           $BT/apksigner verify -v --print-certs "$APK" | head -15 || true
           $BT/zipalign -c -v 4 "$APK" | tail -3 || true
           unzip -v "$APK" | grep -E "resources.arsc|AndroidManifest" || true
+          if $BT/aapt dump xmltree "$APK" AndroidManifest.xml | grep -qi testOnly; then
+            echo "ERROR: APK is testOnly"; exit 1
+          else
+            echo "testOnly: NO"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: telegram-arm64-apk
-          path: "**/intermediates/apk/afat/debug/*.apk"
+          path: "**/build/outputs/apk/afat/debug/*.apk"
           if-no-files-found: error
