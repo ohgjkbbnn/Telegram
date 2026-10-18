@@ -25,8 +25,14 @@ jobs:
 
       - name: Restrict ABI to arm64
         run: |
-          grep -rl 'abiFilters "armeabi-v7a"' --include=build.gradle . | xargs -r sed -i 's/abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"/abiFilters "arm64-v8a"/'
-          grep -rn "abiFilters" --include=build.gradle .
+          grep -rl "abiFilters" --include=build.gradle --include=build.gradle.kts . | xargs -r sed -i -E 's/abiFilters .*/abiFilters "arm64-v8a"/'
+          echo "--- abiFilters after edit:"
+          grep -rn "abiFilters" --include=build.gradle --include=build.gradle.kts .
+
+      - name: Make debug build non-debuggable
+        run: |
+          sed -i -E 's/^([[:space:]]*)(jniDebuggable|debuggable) true/\1\2 false/' TMessagesProj_AppStandalone/build.gradle
+          grep -n "ebuggable" TMessagesProj_AppStandalone/build.gradle
 
       - name: Restore signing key
         run: |
@@ -98,6 +104,7 @@ jobs:
           $BT/apksigner verify -v --print-certs "$APK" | head -15 || true
           $BT/zipalign -c -v 4 "$APK" | tail -3 || true
           unzip -v "$APK" | grep -E "resources.arsc|AndroidManifest" || true
+          $BT/aapt dump xmltree "$APK" AndroidManifest.xml | grep -i debuggable || echo "debuggable: not set"
           if $BT/aapt dump xmltree "$APK" AndroidManifest.xml | grep -qi testOnly; then
             echo "ERROR: APK is testOnly"; exit 1
           else
