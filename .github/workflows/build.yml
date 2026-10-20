@@ -43,7 +43,7 @@ jobs:
           path: |
             TMessagesProj/.cxx
             TMessagesProj/build/intermediates/cxx
-          key: cxx-${{ runner.os }}-${{ steps.jni.outputs.h }}
+          key: cxx-v2-${{ runner.os }}-${{ steps.jni.outputs.h }}
 
       - name: Keep cached native objects valid
         if: steps.cxxcache.outputs.cache-hit == 'true'
@@ -63,6 +63,11 @@ jobs:
           grep -rl "abiFilters" --include=build.gradle --include=build.gradle.kts . | xargs -r sed -i -E 's/abiFilters .*/abiFilters "arm64-v8a"/'
           echo "--- abiFilters after edit:"
           grep -rn "abiFilters" --include=build.gradle --include=build.gradle.kts .
+
+      - name: Restrict native build to arm64 (library)
+        run: |
+          sed -i '/minSdkVersion 23/a\        ndk { abiFilters "arm64-v8a" }' TMessagesProj/build.gradle
+          grep -n -B1 "abiFilters" TMessagesProj/build.gradle
 
       - name: Make debug build non-debuggable
         run: |
@@ -95,10 +100,10 @@ jobs:
             D=${pair%%:*}; REST=${pair#*:}; N=${REST%%:*}; F=${REST#*:}
             R=$((N/2)); INNER=$((F*90/100))
             mkdir -p $S/mipmap-$D $M/mipmap-$D
-            convert "$ICON" -resize ${N}x${N} PNG32:$S/mipmap-$D/ic_launcher_sa.png
-            convert "$ICON" -resize ${N}x${N} PNG32:$M/mipmap-$D/ic_launcher.png
-            convert "$ICON" -resize ${N}x${N} -alpha set \( -size ${N}x${N} xc:none -fill white -draw "circle $R,$R $R,0" \) -compose DstIn -composite PNG32:$M/mipmap-$D/ic_launcher_round.png
-            convert -size ${F}x${F} xc:none \( "$ICON" -resize ${INNER}x${INNER} \) -gravity center -composite PNG32:$M/mipmap-$D/truegram_fg.png
+            convert "$ICON" -resize ${N}x${N} -define png:exclude-chunks=date,time PNG32:$S/mipmap-$D/ic_launcher_sa.png
+            convert "$ICON" -resize ${N}x${N} -define png:exclude-chunks=date,time PNG32:$M/mipmap-$D/ic_launcher.png
+            convert "$ICON" -resize ${N}x${N} -alpha set \( -size ${N}x${N} xc:none -fill white -draw "circle $R,$R $R,0" \) -compose DstIn -composite -define png:exclude-chunks=date,time PNG32:$M/mipmap-$D/ic_launcher_round.png
+            convert -size ${F}x${F} xc:none \( "$ICON" -resize ${INNER}x${INNER} \) -gravity center -composite -define png:exclude-chunks=date,time PNG32:$M/mipmap-$D/truegram_fg.png
           done
           for X in $S/mipmap-anydpi-v26/ic_launcher_sa.xml $M/mipmap-anydpi-v26/ic_launcher.xml $M/mipmap-anydpi-v26/ic_launcher_round.xml; do
             printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
