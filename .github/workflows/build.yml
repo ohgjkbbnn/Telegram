@@ -82,7 +82,12 @@ jobs:
       - name: Apply custom icon
         run: |
           set -e
-          command -v convert >/dev/null || sudo apt-get install -y imagemagick
+          if ! command -v convert >/dev/null; then
+            for i in 1 2 3; do
+              sudo apt-get update -y && sudo apt-get install -y imagemagick && break
+              echo "apt попытка $i не удалась, повтор через 20 с"; sleep 20
+            done
+          fi
           ICON=file_0000000047a881f4b2d2a66902d1511e.png
           test -f "$ICON"
           ALPHA=$(convert "$ICON" -format "%[fx:p{0,0}.a]" info:)
