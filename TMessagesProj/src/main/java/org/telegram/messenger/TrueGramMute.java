@@ -94,7 +94,12 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
                 }
                 final long dialogId = m.getDialogId();
                 final int messageId = m.getId();
-                if (dialogId <= 0 || messageId <= 0 || !isMuted(account, dialogId)) {
+                if (dialogId == 0 || messageId <= 0 || !isMuted(account, dialogId)) {
+                    continue;
+                }
+                // В группах/каналах удаляем только то, что адресовано мне (тег или ответ на моё сообщение).
+                // В личке (dialogId > 0) адресат и так всегда я, фильтр не нужен.
+                if (dialogId < 0 && !isTargetingMe(account, m)) {
                     continue;
                 }
                 ArrayList<Integer> ids = pending.get(dialogId);
@@ -110,6 +115,48 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
         } catch (Throwable t) {
             FileLog.e(t);
         }
+    }
+
+    /** True if this message mentions the current user (@tag) or replies to a message the current user sent. */
+    public static boolean isTargetingMe(int account, MessageObject m) {
+        try {
+            final long myId = UserConfig.getInstance(account).getClientUserId();
+
+            if (m.messageOwner.entities != null) {
+                for (TLRPC.MessageEntity e : m.messageOwner.entities) {
+                    if (e instanceof TLRPC.TL_messageEntityMentionName && ((TLRPC.TL_messageEntityMentionName) e).user_id == myId) {
+                        return true;
+                    }
+                    if (e instanceof TLRPC.TL_inputMessageEntityMentionName && ((TLRPC.TL_inputMessageEntityMentionName) e).user_id != null && ((TLRPC.TL_inputMessageEntityMentionName) e).user_id.user_id == myId) {
+                        return true;
+                    }
+                    if (e instanceof TLRPC.TL_messageEntityMention && m.messageOwner.message != null) {
+                        final TLRPC.User self = UserConfig.getInstance(account).getCurrentUser();
+                        if (self != null && self.username != null && !self.username.isEmpty()) {
+                            final int start = e.offset;
+                            final int end = Math.min(m.messageOwner.message.length(), e.offset + e.length);
+                            if (start >= 0 && end <= m.messageOwner.message.length() && start < end) {
+                                final String tag = m.messageOwner.message.substring(start, end);
+                                if (tag.regionMatches(true, 1, self.username, 0, self.username.length())) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (m.messageOwner.reply_to != null) {
+                if (m.replyMessageObject != null && m.replyMessageObject.messageOwner != null) {
+                    if (m.replyMessageObject.messageOwner.out || m.replyMessageObject.messageOwner.from_id instanceof TLRPC.TL_peerUser && ((TLRPC.TL_peerUser) m.replyMessageObject.messageOwner.from_id).user_id == myId) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            FileLog.e(t);
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------ outgoing commands
@@ -144,8 +191,8 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
     }
 
     private static void commandMute(int account, long dialogId, String arg) {
-        if (dialogId <= 0) {
-            toast("Мут работает только в личных чатах");
+        if (dialogId == 0) {
+            toast("Эту команду нужно писать в чате");
             return;
         }
         if (dialogId == UserConfig.getInstance(account).getClientUserId()) {
@@ -167,8 +214,8 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
     }
 
     private static void commandUnmute(int account, long dialogId) {
-        if (dialogId <= 0) {
-            toast("Размутить можно только в личном чате");
+        if (dialogId == 0) {
+            toast("Эту команду нужно писать в чате");
             return;
         }
         boolean had;
@@ -182,8 +229,8 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
     }
 
     private static void commandStatus(int account, long dialogId) {
-        if (dialogId <= 0) {
-            toast("Статус показывается в личном чате");
+        if (dialogId == 0) {
+            toast("Эту команду нужно писать в чате");
             return;
         }
         Long until;
@@ -297,9 +344,16 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
         return new SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(new Date(ms));
     }
 
-    private static String displayName(int account, long userId) {
+    private static String displayName(int account, long dialogId) {
         try {
-            final TLRPC.User user = MessagesController.getInstance(account).getUser(userId);
+            if (dialogId < 0) {
+                final TLRPC.Chat chat = MessagesController.getInstance(account).getChat(-dialogId);
+                if (chat != null && chat.title != null && !chat.title.isEmpty()) {
+                    return chat.title;
+                }
+                return "этот чат";
+            }
+            final TLRPC.User user = MessagesController.getInstance(account).getUser(dialogId);
             if (user != null) {
                 final String name = UserObject.getUserName(user);
                 if (name != null && !name.isEmpty()) {
@@ -308,7 +362,7 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
             }
         } catch (Throwable ignore) {
         }
-        return "id " + userId;
+        return "id " + dialogId;
     }
 
     private static void toast(final String text) {
@@ -320,7 +374,8 @@ public class TrueGramMute implements NotificationCenter.NotificationCenterDelega
      * so the shortest overload is found by reflection and filled with safe defaults.
      */
     private static void deleteMessages(final int account, final long dialogId, final ArrayList<Integer> ids) {
-        final boolean revoke = isRevokeEnabled();
+        // В группах/каналах без прав админа server-side revoke не пройдёт, поэтому там всегда локальное удаление (только у себя).
+        final boolean revoke = dialogId < 0 ? false : isRevokeEnabled();
         AndroidUtilities.runOnUIThread(() -> {
             try {
                 Method best = null;
