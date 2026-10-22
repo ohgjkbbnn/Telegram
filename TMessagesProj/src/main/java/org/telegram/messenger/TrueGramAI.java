@@ -74,6 +74,29 @@ public class TrueGramAI {
         return ApplicationLoader.applicationContext.getSharedPreferences("truegram_ai", Context.MODE_PRIVATE);
     }
 
+    // ------------------------------------------------------------ auto-reply diagnostics
+
+    /** Last error from an auto-reply attempt (any chat), so it's visible in settings instead of silently failing. */
+    public static void setLastAutoReplyError(String error, long dialogId) {
+        prefs().edit()
+                .putString("last_autoreply_error", error == null ? "" : error)
+                .putLong("last_autoreply_error_dialog", dialogId)
+                .putLong("last_autoreply_error_time", System.currentTimeMillis())
+                .apply();
+    }
+
+    public static String getLastAutoReplyError() {
+        return prefs().getString("last_autoreply_error", "");
+    }
+
+    public static long getLastAutoReplyErrorTime() {
+        return prefs().getLong("last_autoreply_error_time", 0L);
+    }
+
+    public static void clearLastAutoReplyError() {
+        prefs().edit().remove("last_autoreply_error").remove("last_autoreply_error_time").apply();
+    }
+
     // ------------------------------------------------------------ token usage
 
     /** Cumulative tokens used for this provider since the key was added (sum of all requests' "usage"). */
