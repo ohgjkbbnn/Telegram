@@ -1,0 +1,634 @@
+package org.telegram.ui;
+
+import android.animation.ValueAnimator;
+import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.core.graphics.ColorUtils;
+import androidx.core.graphics.PathParser;
+import androidx.recyclerview.widget.RecyclerView;
+
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.TrueGramConfig;
+import org.telegram.ui.ActionBar.Theme;
+
+/**
+ * TrueGram: small Material 3 style UI kit (tonal grouped cards, M3 switch, section labels).
+ * Uses only plain Android views + Telegram theme colors, so it follows light/dark themes.
+ */
+public class TrueGramM3 {
+
+    public static final int SHAPE_SINGLE = 0;
+    public static final int SHAPE_TOP = 1;
+    public static final int SHAPE_MIDDLE = 2;
+    public static final int SHAPE_BOTTOM = 3;
+
+    public static final int TRAILING_NONE = 0;
+    public static final int TRAILING_SWITCH = 1;
+    public static final int TRAILING_COLOR = 2;
+    public static final int TRAILING_CHEVRON = 3;
+
+    private static int dp(int v) {
+        return AndroidUtilities.dp(v);
+    }
+
+    public static boolean isM3() {
+        return TrueGramConfig.isM3Style();
+    }
+
+    private static Drawable classicBackground() {
+        final int ripple = ColorUtils.setAlphaComponent(primary(), 48);
+        return new RippleDrawable(ColorStateList.valueOf(ripple),
+                new android.graphics.drawable.ColorDrawable(surface()),
+                new android.graphics.drawable.ColorDrawable(Color.WHITE));
+    }
+
+    public static void bindLabel(TextView tv, String text) {
+        tv.setText(text);
+        tv.setTextColor(primary());
+        if (isM3()) {
+            tv.setPadding(dp(32), dp(22), dp(32), dp(8));
+            tv.setBackgroundColor(Color.TRANSPARENT);
+        } else {
+            tv.setPadding(dp(20), dp(16), dp(20), dp(6));
+            tv.setBackgroundColor(surface());
+        }
+    }
+
+    public static void bindNote(TextView tv, String text) {
+        tv.setText(text);
+        tv.setTextColor(onSurfaceVariant());
+        if (isM3()) {
+            tv.setPadding(dp(32), dp(8), dp(32), dp(4));
+        } else {
+            tv.setPadding(dp(20), dp(8), dp(20), dp(8));
+        }
+    }
+
+    public static int primary() {
+        return Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader);
+    }
+
+    /** Hue-shifted variant of primary, for giving each section its own tonal color. */
+    public static int accent(int index) {
+        final float[] shifts = {0f, 40f, 150f, 210f, 280f, 320f};
+        final float[] hsl = new float[3];
+        ColorUtils.colorToHSL(primary(), hsl);
+        hsl[0] = (hsl[0] + shifts[Math.abs(index) % shifts.length]) % 360f;
+        return ColorUtils.HSLToColor(hsl);
+    }
+
+    public static int surface() {
+        return Theme.getColor(Theme.key_windowBackgroundWhite);
+    }
+
+    public static int onSurface() {
+        return Theme.getColor(Theme.key_windowBackgroundWhiteBlackText);
+    }
+
+    public static int onSurfaceVariant() {
+        return Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2);
+    }
+
+    private static GradientDrawable roundedRect(int color, float top, float bottom) {
+        final GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadii(new float[]{top, top, top, top, bottom, bottom, bottom, bottom});
+        return d;
+    }
+
+    /** Grouped card background: big outer corners, small inner corners (M3 expressive lists). */
+    public static Drawable cardBackground(int shape) {
+        final float outer = dp(24);
+        final float inner = dp(6);
+        final float top = (shape == SHAPE_TOP || shape == SHAPE_SINGLE) ? outer : inner;
+        final float bottom = (shape == SHAPE_BOTTOM || shape == SHAPE_SINGLE) ? outer : inner;
+        final GradientDrawable fill = roundedRect(surface(), top, bottom);
+        final GradientDrawable mask = roundedRect(Color.WHITE, top, bottom);
+        final int ripple = ColorUtils.setAlphaComponent(primary(), 48);
+        return new RippleDrawable(ColorStateList.valueOf(ripple), fill, mask);
+    }
+
+    // ------------------------------------------------------------------ section label
+
+    public static TextView createSectionLabel(Context context) {
+        final TextView tv = new TextView(context);
+        tv.setTextSize(14);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(primary());
+        tv.setPadding(dp(32), dp(22), dp(32), dp(8));
+        tv.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return tv;
+    }
+
+    public static TextView createSupportingText(Context context) {
+        final TextView tv = new TextView(context);
+        tv.setTextSize(13);
+        tv.setLineSpacing(dp(2), 1f);
+        tv.setTextColor(onSurfaceVariant());
+        tv.setPadding(dp(32), dp(8), dp(32), dp(4));
+        tv.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return tv;
+    }
+
+    public static View createSpacer(Context context, int heightDp) {
+        final View v = new View(context);
+        v.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp)));
+        return v;
+    }
+
+    // ------------------------------------------------------------------ hero card
+
+    public static View createHero(Context context, String emoji, String title, String subtitle) {
+        final FrameLayout wrapper = new FrameLayout(context);
+        wrapper.setPadding(dp(16), dp(8), dp(16), dp(8));
+        wrapper.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(24), dp(24), dp(24), dp(24));
+        card.setBackground(roundedRect(ColorUtils.setAlphaComponent(primary(), 38), dp(32), dp(32)));
+
+        if (emoji != null && emoji.startsWith("M")) {
+            final IconView icon = new IconView(context, 14);
+            icon.setIcon(emoji, Color.WHITE);
+            final GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.OVAL);
+            bg.setColor(primary());
+            icon.setBackground(bg);
+            card.addView(icon, new LinearLayout.LayoutParams(dp(56), dp(56)));
+        } else {
+            final TextView icon = new TextView(context);
+            icon.setText(emoji);
+            icon.setTextSize(36);
+            card.addView(icon, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        final TextView titleView = new TextView(context);
+        titleView.setText(title);
+        titleView.setTextSize(28);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextColor(onSurface());
+        final LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.topMargin = dp(16);
+        card.addView(titleView, tlp);
+
+        final TextView sub = new TextView(context);
+        sub.setText(subtitle);
+        sub.setTextSize(14);
+        sub.setTextColor(onSurfaceVariant());
+        final LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.topMargin = dp(4);
+        card.addView(sub, slp);
+
+        wrapper.addView(card, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return wrapper;
+    }
+
+    // ------------------------------------------------------------------ vector icons (Material, 24x24 path data)
+
+    public static final String ICON_SETTINGS = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
+    public static final String ICON_PALETTE = "M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z";
+    public static final String ICON_AI = "M12 2C10.9 2 10 2.9 10 4C10 4.74 10.4 5.38 11 5.72V7H8C6.34 7 5 8.34 5 10V11C3.9 11 3 11.9 3 13S3.9 15 5 15V16C5 17.66 6.34 19 8 19H9V20C9 21.1 9.9 22 11 22S13 21.1 13 20V19H14V20C14 21.1 14.9 22 16 22S18 21.1 18 20V19C19.66 19 21 17.66 21 16V15C22.1 15 23 14.1 23 13S22.1 11 21 11V10C21 8.34 19.66 7 18 7H13V5.72C13.6 5.38 14 4.74 14 4C14 2.9 13.1 2 12 2ZM8.5 10C9.33 10 10 10.67 10 11.5S9.33 13 8.5 13 7 12.33 7 11.5 7.67 10 8.5 10ZM15.5 10C16.33 10 17 10.67 17 11.5S16.33 13 15.5 13 14 12.33 14 11.5 14.67 10 15.5 10ZM9 15H15V16C15 16.55 14.55 17 14 17H10C9.45 17 9 16.55 9 16V15Z";
+    public static final String ICON_DELETE = "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z";
+    public static final String ICON_EYE = "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z";
+    public static final String ICON_EDIT = "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z";
+    public static final String ICON_BOLD = "M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z";
+    public static final String ICON_SYNC = "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z";
+    public static final String ICON_PHOTO = "M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z";
+    public static final String ICON_VIDEO = "M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z";
+    public static final String ICON_INFO = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z";
+    public static final String ICON_SCREEN = "M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z";
+    public static final String ICON_PIN = "M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z";
+    public static final String ICON_MIC = "M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z";
+    public static final String ICON_MUSIC = "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z";
+    public static final String ICON_PERSON = "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z";
+    public static final String ICON_PEOPLE = "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z";
+    public static final String ICON_CHAT = "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z";
+    public static final String ICON_OPACITY = "M17.66 8L12 2.35 6.34 8C4.78 9.56 4 11.64 4 13.64s.78 4.11 2.34 5.67 3.61 2.35 5.66 2.35 4.1-.79 5.66-2.35S20 15.64 20 13.64 19.22 9.56 17.66 8zM6 14c.01-2 .62-3.27 1.76-4.4L12 5.27l4.24 4.38C17.38 10.77 17.99 12 18 14H6z";
+    public static final String ICON_GHOST = "M12 2C7.58 2 4 5.58 4 10V22L6.67 19.5L9.33 22L12 19.5L14.67 22L17.33 19.5L20 22V10C20 5.58 16.42 2 12 2ZM9 8.4A1.6 1.6 0 1 1 9 11.6A1.6 1.6 0 1 1 9 8.4ZM15 8.4A1.6 1.6 0 1 1 15 11.6A1.6 1.6 0 1 1 15 8.4Z";
+    public static final String ICON_CLOSE = "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z";
+    public static final String ICON_TITLE = "M5 4v3h5.5v12h3V7H19V4z";
+    public static final String ICON_MUTE = "M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z";
+
+    public static final String ICON_ACCOUNT = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z";
+    public static final String ICON_LOCK = "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z";
+    public static final String ICON_BELL = "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z";
+    public static final String ICON_FOLDER = "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z";
+    public static final String ICON_DEVICES = "M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z";
+    public static final String ICON_DATA = "M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z";
+    public static final String ICON_BATTERY = "M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z";
+    public static final String ICON_LANGUAGE = "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z";
+    public static final String ICON_STAR = "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z";
+    public static final String ICON_BOLT = "M7 2v11h3v9l7-12h-4l4-8z";
+    public static final String ICON_WORK = "M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z";
+    public static final String ICON_GIFT = "M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8 20 8v6z";
+    public static final String ICON_HELP = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z";
+    public static final String ICON_QA = "M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z";
+    public static final String ICON_SHIELD = "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z";
+    public static final String ICON_BULB = "M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z";
+    public static final String ICON_EXTENSION = "M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z";
+    public static final String ICON_WALLET = "M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z";
+    public static final String ICON_TRENDING = "M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z";
+    public static final String ICON_CHEVRON = "M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z";
+    public static final String ICON_PHONE = "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z";
+    public static final String ICON_AT = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z";
+    public static final String ICON_CAKE = "M12 6c1.11 0 2-.9 2-2 0-.38-.1-.73-.29-1.03L12 0l-1.71 2.97c-.19.3-.29.65-.29 1.03 0 1.1.9 2 2 2zm4.6 9.99l-1.07-1.07-1.08 1.07c-1.3 1.3-3.58 1.31-4.89 0l-1.07-1.07-1.09 1.07C6.75 16.64 5.88 17 4.96 17c-.73 0-1.4-.23-1.96-.61V21c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-4.61c-.56.38-1.23.61-1.96.61-.92 0-1.79-.36-2.44-1.01zM18 9h-5V7h-2v2H6c-1.66 0-3 1.34-3 3v1.54c0 1.08.88 1.96 1.96 1.96.52 0 1.02-.2 1.38-.57l2.14-2.13 2.13 2.13c.74.74 2.03.74 2.77 0l2.14-2.13 2.13 2.13c.37.37.86.57 1.38.57 1.08 0 1.96-.88 1.96-1.96V12C21 10.34 19.66 9 18 9z";
+    public static final String ICON_CAMPAIGN = "M18 11v2h4v-2h-4zm-2 6.61c.96.71 2.21 1.65 3.2 2.39.4-.53.8-1.07 1.2-1.6-.99-.74-2.24-1.68-3.2-2.4-.4.54-.8 1.08-1.2 1.61zM20.4 5.6c-.4-.53-.8-1.07-1.2-1.6-.99.74-2.24 1.68-3.2 2.4.4.53.8 1.07 1.2 1.6.96-.72 2.21-1.65 3.2-2.4zM4 9c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v4h2v-4h1l5 3V6L8 9H4zm11.5 3c0-1.33-.58-2.53-1.5-3.35v6.69c.92-.81 1.5-2.01 1.5-3.34z";
+    public static final String ICON_LOCATION = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z";
+    public static final String ICON_CLOCK = "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z";
+    public static final String ICON_LOGOUT = "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z";
+    public static final String ICON_PERSON_ADD = "M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z";
+    public static final String ICON_CHECK = "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
+
+    private static final java.util.HashMap<String, Path> PATH_CACHE = new java.util.HashMap<>();
+
+    private static Path pathFor(String data) {
+        Path p = PATH_CACHE.get(data);
+        if (p == null) {
+            try {
+                p = PathParser.createPathFromPathData(data);
+            } catch (Exception e) {
+                p = null;
+            }
+            if (p == null) {
+                p = new Path();
+            }
+            PATH_CACHE.put(data, p);
+        }
+        return p;
+    }
+
+    /** Draws a 24x24 Material path scaled to the view (minus inset), tinted with a color. */
+    public static class IconView extends View {
+
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path scaled = new Path();
+        private final android.graphics.Matrix matrix = new android.graphics.Matrix();
+        private final int insetPx;
+        private Path source;
+
+        public IconView(Context context, int insetDp) {
+            super(context);
+            insetPx = dp(insetDp);
+            paint.setStyle(Paint.Style.FILL);
+        }
+
+        public void setIcon(String pathData, int color) {
+            source = pathData == null ? null : pathFor(pathData);
+            paint.setColor(color);
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (source == null) {
+                return;
+            }
+            final float size = Math.min(getWidth(), getHeight()) - insetPx * 2f;
+            if (size <= 0) {
+                return;
+            }
+            final float scale = size / 24f;
+            matrix.reset();
+            matrix.postScale(scale, scale);
+            matrix.postTranslate((getWidth() - size) / 2f, (getHeight() - size) / 2f);
+            scaled.reset();
+            source.transform(matrix, scaled);
+            canvas.drawPath(scaled, paint);
+        }
+    }
+
+    // ------------------------------------------------------------------ M3 switch
+
+    public static class M3Switch extends View {
+
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path check = new Path();
+        private final android.graphics.Matrix matrix = new android.graphics.Matrix();
+        private float progress;
+        private boolean checked;
+        private ValueAnimator animator;
+
+        public M3Switch(Context context) {
+            super(context);
+        }
+
+        public void setChecked(boolean value, boolean animate) {
+            if (animator != null) {
+                animator.cancel();
+                animator = null;
+            }
+            checked = value;
+            final float target = value ? 1f : 0f;
+            if (!animate) {
+                progress = target;
+                invalidate();
+                return;
+            }
+            animator = ValueAnimator.ofFloat(progress, target);
+            animator.setDuration(250);
+            animator.setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f));
+            animator.addUpdateListener(a -> {
+                progress = (float) a.getAnimatedValue();
+                invalidate();
+            });
+            animator.start();
+        }
+
+        public boolean isChecked() {
+            return checked;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            setMeasuredDimension(dp(52), dp(32));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            final float w = dp(52);
+            final float h = dp(32);
+            final float p = progress;
+
+            final int primary = primary();
+            final int outline = onSurfaceVariant();
+            final int offTrack = ColorUtils.blendARGB(surface(), outline, 0.10f);
+
+            // track
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(ColorUtils.blendARGB(offTrack, primary, p));
+            canvas.drawRoundRect(0, 0, w, h, h / 2f, h / 2f, paint);
+
+            // outline fades out when on
+            if (p < 1f) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(2));
+                paint.setColor(ColorUtils.setAlphaComponent(outline, (int) (200 * (1f - p))));
+                final float in = dp(1);
+                canvas.drawRoundRect(in, in, w - in, h - in, h / 2f - in, h / 2f - in, paint);
+            }
+
+            // thumb: 16dp off -> 24dp on
+            final float radius = dp(8) + dp(4) * p;
+            final float cx = dp(16) + (w - dp(32)) * p;
+            final float cy = h / 2f;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(ColorUtils.blendARGB(outline, Color.WHITE, p));
+            canvas.drawCircle(cx, cy, radius, paint);
+
+            // check glyph inside the thumb
+            if (p > 0.05f) {
+                final float size = dp(16);
+                final float sc = size / 24f;
+                matrix.reset();
+                matrix.postScale(sc, sc);
+                matrix.postTranslate(cx - size / 2f, cy - size / 2f);
+                check.reset();
+                pathFor(ICON_CHECK).transform(matrix, check);
+                paint.setColor(ColorUtils.setAlphaComponent(primary, (int) (255 * Math.min(1f, p))));
+                canvas.drawPath(check, paint);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ list item
+
+    public static class M3Item extends FrameLayout {
+
+        private final LinearLayout card;
+        private final IconView iconView;
+        private final TextView titleView;
+        private final TextView subtitleView;
+        private final M3Switch switchView;
+        private final View colorDot;
+        private final IconView chevron;
+        private final View divider;
+        private final LinearLayout.LayoutParams textsParams;
+        private int accentColor;
+        private String iconPath;
+
+        public M3Item(Context context) {
+            super(context);
+            setPadding(dp(16), 0, dp(16), dp(2));
+            setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(16), dp(14), dp(16), dp(14));
+            card.setClickable(true);
+            addView(card, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            iconView = new IconView(context, 8);
+            card.addView(iconView, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+            final LinearLayout texts = new LinearLayout(context);
+            texts.setOrientation(LinearLayout.VERTICAL);
+            textsParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            textsParams.leftMargin = dp(16);
+            textsParams.rightMargin = dp(12);
+            card.addView(texts, textsParams);
+
+            titleView = new TextView(context);
+            titleView.setTextSize(16);
+            texts.addView(titleView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            subtitleView = new TextView(context);
+            subtitleView.setTextSize(13);
+            final LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            sp.topMargin = dp(2);
+            texts.addView(subtitleView, sp);
+
+            switchView = new M3Switch(context);
+            card.addView(switchView, new LinearLayout.LayoutParams(dp(52), dp(32)));
+
+            colorDot = new View(context);
+            card.addView(colorDot, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+            chevron = new IconView(context, 0);
+            card.addView(chevron, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+            divider = new View(context);
+            final FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1, Gravity.BOTTOM);
+            dlp.leftMargin = dp(20);
+            addView(divider, dlp);
+        }
+
+        public void bind(int shape, String emoji, String title, String subtitle, int trailing) {
+            final boolean m3 = isM3();
+            if (m3) {
+                setPadding(dp(16), 0, dp(16), dp(2));
+                card.setPadding(dp(16), dp(14), dp(16), dp(14));
+                card.setBackground(cardBackground(shape));
+                textsParams.leftMargin = dp(16);
+                divider.setVisibility(GONE);
+            } else {
+                setPadding(0, 0, 0, 0);
+                card.setPadding(dp(20), dp(12), dp(20), dp(12));
+                card.setBackground(classicBackground());
+                textsParams.leftMargin = 0;
+                divider.setBackgroundColor(Theme.getColor(Theme.key_divider));
+                divider.setVisibility(shape == SHAPE_TOP || shape == SHAPE_MIDDLE ? VISIBLE : GONE);
+            }
+
+            accentColor = 0;
+            iconPath = emoji;
+            iconView.setVisibility(m3 ? VISIBLE : GONE);
+            applyAccent();
+
+            titleView.setText(title);
+            titleView.setTextColor(onSurface());
+
+            if (subtitle == null || subtitle.isEmpty()) {
+                subtitleView.setVisibility(GONE);
+            } else {
+                subtitleView.setVisibility(VISIBLE);
+                subtitleView.setText(subtitle);
+                subtitleView.setTextColor(onSurfaceVariant());
+            }
+
+            switchView.setVisibility(trailing == TRAILING_SWITCH ? VISIBLE : GONE);
+            colorDot.setVisibility(trailing == TRAILING_COLOR ? VISIBLE : GONE);
+            chevron.setVisibility(trailing == TRAILING_CHEVRON ? VISIBLE : GONE);
+            chevron.setIcon(ICON_CHEVRON, onSurfaceVariant());
+        }
+
+        private void applyAccent() {
+            final int c = accentColor != 0 ? accentColor : primary();
+            iconView.setIcon(iconPath, c);
+            final GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setShape(GradientDrawable.OVAL);
+            iconBg.setColor(ColorUtils.setAlphaComponent(c, 44));
+            iconView.setBackground(iconBg);
+        }
+
+        /** Call after bind(): tints the icon + its tonal circle with a custom color. */
+        public void setAccent(int color) {
+            accentColor = color;
+            applyAccent();
+        }
+
+        public void setChecked(boolean checked, boolean animate) {
+            switchView.setChecked(checked, animate);
+        }
+
+        public void setColor(int color) {
+            final GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(color);
+            dot.setStroke(dp(1), ColorUtils.setAlphaComponent(onSurfaceVariant(), 120));
+            colorDot.setBackground(dot);
+        }
+
+        @Override
+        public void setOnClickListener(OnClickListener l) {
+            if (card != null) {
+                card.setOnClickListener(l);
+            } else {
+                super.setOnClickListener(l);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ bottom bar editor
+
+    /** Preview of the bottom bar: tap a tab to hide it (dashed + dimmed) or bring it back. */
+    public static class TabsEditorView extends FrameLayout {
+
+        public interface Listener {
+            void onToggle(int tabIndex);
+        }
+
+        private static final String[] ICONS = {ICON_CHAT, ICON_PEOPLE, ICON_SETTINGS, ICON_PERSON};
+        private static final String[] NAMES = {"Чаты", "Контакты", "Настройки", "Профиль"};
+
+        private final LinearLayout card;
+        private final LinearLayout[] slots = new LinearLayout[4];
+        private final IconView[] icons = new IconView[4];
+        private final TextView[] labels = new TextView[4];
+
+        public TabsEditorView(Context context) {
+            super(context);
+            setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setGravity(Gravity.CENTER);
+            addView(card, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            for (int i = 0; i < 4; i++) {
+                final LinearLayout slot = new LinearLayout(context);
+                slot.setOrientation(LinearLayout.VERTICAL);
+                slot.setGravity(Gravity.CENTER);
+                slot.setPadding(dp(4), dp(14), dp(4), dp(12));
+
+                final IconView icon = new IconView(context, 0);
+                icon.setIcon(ICONS[i], primary());
+                slot.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+                final TextView label = new TextView(context);
+                label.setText(NAMES[i]);
+                label.setTextSize(12);
+                label.setSingleLine(true);
+                label.setGravity(Gravity.CENTER);
+                final LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                llp.topMargin = dp(4);
+                slot.addView(label, llp);
+
+                final LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                slp.leftMargin = dp(3);
+                slp.rightMargin = dp(3);
+                card.addView(slot, slp);
+
+                slots[i] = slot;
+                icons[i] = icon;
+                labels[i] = label;
+            }
+        }
+
+        public void bind(boolean[] hidden, Listener listener) {
+            final boolean m3 = isM3();
+            setPadding(m3 ? dp(16) : 0, dp(2), m3 ? dp(16) : 0, dp(2));
+            card.setPadding(dp(10), dp(10), dp(10), dp(10));
+            card.setBackground(roundedRect(surface(), m3 ? dp(28) : 0, m3 ? dp(28) : 0));
+
+            for (int i = 0; i < 4; i++) {
+                final boolean isHidden = hidden[i];
+                final GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(dp(18));
+                if (isHidden) {
+                    bg.setColor(Color.TRANSPARENT);
+                    bg.setStroke(dp(2), ColorUtils.setAlphaComponent(onSurfaceVariant(), 160), dp(6), dp(4));
+                } else {
+                    bg.setColor(ColorUtils.setAlphaComponent(primary(), i == 0 ? 56 : 34));
+                }
+                slots[i].setBackground(bg);
+
+                final float a = isHidden ? 0.4f : 1f;
+                icons[i].setIcon(ICONS[i], isHidden ? onSurfaceVariant() : primary());
+                icons[i].setAlpha(a);
+                labels[i].setAlpha(a);
+                labels[i].setTextColor(isHidden ? onSurfaceVariant() : onSurface());
+
+                final int index = i;
+                slots[i].setOnClickListener(v -> listener.onToggle(index));
+            }
+        }
+    }
+
+}
