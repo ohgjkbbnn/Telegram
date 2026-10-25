@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Разрешаем HTTP только для сервера баннеров. Остальной трафик остаётся на HTTPS. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">2.26.124.20</domain>
+    </domain-config>
+</network-security-config>
