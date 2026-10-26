@@ -263,4 +263,9 @@
     <string name="RemindTodayAt">\'Отправить сегодня в\' HH:mm</string>
     <string name="RemindDayAt">\'Отправить\' d MMM \'в\' HH:mm</string>
     <string name="RemindDayYearAt">\'Напомнить\' d MMM yyyy \'в\' HH:mm</string>
+    <string name="Gift2DeleteOption">Удалить подарок</string>
+    <string name="Gift2DeleteText">Вы хотите удалить этот подарок?\n\nОн исчезнет из профиля, восстановить его будет нельзя.</string>
+    <string name="Gift2Deleted">Подарок удалён</string>
+    <string name="Delete">Удалить</string>
+    <string name="Cancel">Отмена</string>
 </resources>
