@@ -1,0 +1,487 @@
+package org.telegram.messenger;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.widget.Toast;
+
+import org.telegram.ui.ActionBar.AlertDialog;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
+/**
+ * TrueGram voice changer for recorded voice messages. Fully self-contained: settings, DSP and the picker dialog live here.
+ *
+ * Hook (one place): after AudioRecord.read(...) in the voice-message recorder call
+ *     TrueGramVoice.process(buffer, bytesRead, sampleRate);
+ * and call TrueGramVoice.onRecordingStart() when a new recording begins.
+ */
+public class TrueGramVoice {
+
+    private static final String PREFS = "truegram_voice";
+    private static final String KEY_PRESET = "preset";
+    private static final String KEY_SEMITONES = "semitones";
+    private static final String KEY_MODE = "mode";
+
+    public static final int PRESET_OFF = 0;
+    public static final int PRESET_CUSTOM = 10;
+
+    public static final String[] NAMES = {
+            "Выкл",
+            "Женский",
+            "Мужской",
+            "Бурундук",
+            "Низкий",
+            "Ребёнок",
+            "Робот",
+            "Демон",
+            "Эхо",
+            "Пещера",
+            "Свой тон"
+    };
+
+    private static final String[] SUBTITLES = {
+            "Без обработки",
+            "Выше тон",
+            "Ниже тон",
+            "Мультяшный высокий голос",
+            "Низкий голос",
+            "Детский голос",
+            "Металлический эффект",
+            "Глубокий и жуткий",
+            "Эхо",
+            "Гулкий зал",
+            "Сдвиг тона от -12 до +12 полутонов"
+    };
+
+    // pitch ratio, ring Hz, ring depth, drive, echo ms, echo feedback, echo mix, reverb, bass boost, treble boost
+    private static final float[][] PARAMS = {
+            {1.00f, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+            {1.28f, 0, 0, 0, 0, 0, 0, 0, 0, 0.3f},
+            {0.82f, 0, 0, 0, 0, 0, 0, 0, 0.3f, 0},
+            {1.50f, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+            {0.70f, 0, 0, 0.30f, 0, 0, 0, 0, 1.0f, 0},
+            {1.55f, 0, 0, 0, 0, 0, 0, 0, 0, 1.5f},
+            {1.00f, 55, 0.75f, 0.20f, 0, 0, 0, 0, 0, 0},
+            {0.50f, 0, 0, 0.35f, 90, 0.35f, 0.25f, 0.35f, 1.6f, 0},
+            {1.00f, 0, 0, 0, 220, 0.40f, 0.35f, 0, 0, 0},
+            {0.92f, 0, 0, 0, 120, 0.30f, 0.25f, 0.55f, 0, 0},
+            {1.00f, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    };
+
+    private static volatile SharedPreferences prefs;
+
+    private static SharedPreferences prefs() {
+        SharedPreferences p = prefs;
+        if (p == null) {
+            synchronized (TrueGramVoice.class) {
+                p = prefs;
+                if (p == null) {
+                    p = prefs = ApplicationLoader.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+                }
+            }
+        }
+        return p;
+    }
+
+    // ------------------------------------------------------------------ settings
+
+    public static int getPreset() {
+        final int p = prefs().getInt(KEY_PRESET, PRESET_OFF);
+        return p >= 0 && p < NAMES.length ? p : PRESET_OFF;
+    }
+
+    public static void setPreset(int preset) {
+        prefs().edit().putInt(KEY_PRESET, preset).apply();
+    }
+
+    /** 1 = presets of this class, 2 = sliders and effects from {@link TrueGramVoice2}. */
+    public static int getMode() {
+        return prefs().getInt(KEY_MODE, 1) == 2 ? 2 : 1;
+    }
+
+    public static void setMode(int mode) {
+        prefs().edit().putInt(KEY_MODE, mode == 2 ? 2 : 1).apply();
+    }
+
+    public static int getSemitones() {
+        return Math.max(-12, Math.min(12, prefs().getInt(KEY_SEMITONES, 0)));
+    }
+
+    public static void setSemitones(int semitones) {
+        prefs().edit().putInt(KEY_SEMITONES, Math.max(-12, Math.min(12, semitones))).apply();
+    }
+
+    public static boolean isEnabled() {
+        if (getMode() == 2) {
+            return TrueGramVoice2.isActive();
+        }
+        return getPreset() != PRESET_OFF;
+    }
+
+    public static String currentName() {
+        if (getMode() == 2) {
+            return TrueGramVoice2.isActive() ? "Голос 2 · " + TrueGramVoice2.currentName() : "Выкл";
+        }
+        final int p = getPreset();
+        if (p == PRESET_CUSTOM) {
+            final int st = getSemitones();
+            return "Свой тон (" + (st > 0 ? "+" : "") + st + ")";
+        }
+        return NAMES[p];
+    }
+
+    // ------------------------------------------------------------------ picker dialog
+
+    /** First step: choose the voice changer type, then its own settings. */
+    public static void showPicker(Context context, Runnable onChanged) {
+        final String[] items = {
+                (getMode() == 1 ? "✓ " : "") + "Голос 1 — пресеты",
+                (getMode() == 2 ? "✓ " : "") + "Голос 2 — ползунки и эффекты"
+        };
+        new AlertDialog.Builder(context)
+                .setTitle("Изменение голоса")
+                .setItems(items, (dialog, which) -> {
+                    setMode(which == 1 ? 2 : 1);
+                    if (which == 1) {
+                        TrueGramVoice2.showEditor(context, onChanged);
+                    } else {
+                        showPresetPicker(context, onChanged);
+                    }
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    /** Name of the current preset of mode 1 (shown as the subtitle in settings). */
+    public static String presetName() {
+        final int p = getPreset();
+        if (p == PRESET_CUSTOM) {
+            final int st = getSemitones();
+            return "Свой тон (" + (st > 0 ? "+" : "") + st + ")";
+        }
+        return NAMES[p];
+    }
+
+    public static void showPresetPicker(Context context, Runnable onChanged) {
+        final String[] items = new String[NAMES.length];
+        for (int i = 0; i < NAMES.length; i++) {
+            items[i] = (i == getPreset() ? "✓ " : "") + NAMES[i] + " — " + SUBTITLES[i];
+        }
+        new AlertDialog.Builder(context)
+                .setTitle(getLastError() == null ? "Изменение голоса" : "Изменение голоса\nОшибка: " + getLastError())
+                .setItems(items, (dialog, which) -> {
+                    setPreset(which);
+                    prefs().edit().remove("last_error").apply();
+                    if (which == PRESET_CUSTOM) {
+                        showSemitonesPicker(context, onChanged);
+                    } else if (onChanged != null) {
+                        onChanged.run();
+                    }
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    private static void showSemitonesPicker(Context context, Runnable onChanged) {
+        final String[] items = new String[25];
+        for (int i = 0; i < items.length; i++) {
+            final int st = i - 12;
+            items[i] = (st > 0 ? "+" : "") + st + " полутонов" + (st == 0 ? " (без сдвига)" : "");
+        }
+        new AlertDialog.Builder(context)
+                .setTitle("Сдвиг тона")
+                .setItems(items, (dialog, which) -> {
+                    setSemitones(which - 12);
+                    if (onChanged != null) {
+                        onChanged.run();
+                    }
+                })
+                .setNegativeButton("Отмена", (d, w) -> {
+                    if (onChanged != null) {
+                        onChanged.run();
+                    }
+                })
+                .show();
+    }
+
+    // ------------------------------------------------------------------ recording hook
+
+    private static Engine engine;
+    private static boolean announced;
+    private static boolean errorReported;
+
+    /** Temporary diagnostics: shows a toast once per recording/call. Set to false when everything works. */
+    private static final boolean DEBUG_TOAST = true;
+
+    private static void debugToast(final String text) {
+        if (!DEBUG_TOAST) {
+            return;
+        }
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_LONG).show();
+            } catch (Throwable ignore) {
+            }
+        });
+    }
+
+    /** Last processing error (kept so it can be read later in the picker dialog). */
+    public static String getLastError() {
+        try {
+            return prefs().getString("last_error", null);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static void rememberError(Throwable t) {
+        String where = "";
+        final StackTraceElement[] st = t.getStackTrace();
+        if (st != null && st.length > 0) {
+            where = " @ " + st[0].getClassName() + "." + st[0].getMethodName() + ":" + st[0].getLineNumber();
+        }
+        final String text = t + where;
+        try {
+            prefs().edit().putString("last_error", text).apply();
+        } catch (Throwable ignore) {
+        }
+        FileLog.e(t);
+        debugToast("Voice error: " + text);
+    }
+
+    /** Call when a new voice recording or call starts. */
+    public static synchronized void onRecordingStart() {
+        engine = null;
+        announced = false;
+        errorReported = false;
+        TrueGramVoice2.onRecordingStart();
+    }
+
+    /**
+     * Processes 16-bit little-endian mono PCM in place.
+     * @param buffer     buffer filled by AudioRecord.read
+     * @param byteCount  number of valid bytes starting at index 0
+     */
+    public static synchronized void process(ByteBuffer buffer, int byteCount, int sampleRate) {
+        try {
+            if (buffer == null || byteCount < 2 || sampleRate <= 0) {
+                return;
+            }
+            if (!announced) {
+                announced = true;
+                debugToast("Voice: " + currentName() + ", " + sampleRate + " Hz");
+            }
+            if (getMode() == 2) {
+                TrueGramVoice2.process(buffer, byteCount, sampleRate);
+                return;
+            }
+            final int preset = getPreset();
+            if (preset == PRESET_OFF) {
+                return;
+            }
+            if (engine == null || engine.sampleRate != sampleRate || engine.preset != preset) {
+                engine = new Engine(sampleRate, preset, getSemitones());
+            }
+            // The caller's buffer may have a stale limit/position from a previous use, so work on a
+            // view that always spans the whole capacity.
+            final ByteBuffer b = buffer.duplicate();
+            b.clear();
+            b.order(ByteOrder.LITTLE_ENDIAN);
+            final int samples = Math.min(byteCount, b.capacity()) / 2;
+            for (int i = 0; i < samples; i++) {
+                final float in = b.getShort(i * 2) / 32768f;
+                float out = engine.tick(in);
+                if (out > 1f) {
+                    out = 1f;
+                } else if (out < -1f) {
+                    out = -1f;
+                }
+                b.putShort(i * 2, (short) (out * 32767f));
+            }
+        } catch (Throwable t) {
+            engine = null;
+            if (!errorReported) {
+                errorReported = true;
+                rememberError(t);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ DSP
+
+    private static class Engine {
+        final int sampleRate;
+        final int preset;
+
+        // pitch shifter (two crossfaded delay taps)
+        private final float ratio;
+        private final boolean shift;
+        private final float[] pbuf;
+        private final int pmask;
+        private final float grain;
+        private int pw;
+        private float phase;
+
+        // ring modulator
+        private final float ringInc;
+        private final float ringDepth;
+        private float ringPhase;
+
+        private final float drive;
+
+        // tone shaping (bass / treble boost)
+        private final float bass;
+        private final float treble;
+        private final float lpBass;
+        private final float lpTreble;
+        private float lowState;
+        private float highState;
+
+        // echo
+        private final float[] ebuf;
+        private final int elen;
+        private int ew;
+        private final float efb;
+        private final float emix;
+
+        // reverb (Freeverb-lite)
+        private final float reverb;
+        private final float[][] comb;
+        private final int[] combPos;
+        private final float[] combDamp;
+        private final float[][] allp;
+        private final int[] allpPos;
+
+        Engine(int sampleRate, int preset, int semitones) {
+            this.sampleRate = sampleRate;
+            this.preset = preset;
+            final float[] p = PARAMS[preset];
+
+            float r = p[0];
+            if (preset == PRESET_CUSTOM) {
+                r = (float) Math.pow(2.0, semitones / 12.0);
+            }
+            ratio = r;
+            shift = Math.abs(r - 1f) > 0.001f;
+            int n = 1;
+            while (n < sampleRate / 4) {
+                n <<= 1;
+            }
+            pbuf = new float[n];
+            pmask = n - 1;
+            grain = Math.max(64, sampleRate * 0.04f);
+
+            ringInc = (float) (2.0 * Math.PI * p[1] / sampleRate);
+            ringDepth = p[2];
+            drive = p[3];
+            bass = p[8];
+            treble = p[9];
+            lpBass = (float) (1.0 - Math.exp(-2.0 * Math.PI * 250.0 / sampleRate));
+            lpTreble = (float) (1.0 - Math.exp(-2.0 * Math.PI * 2500.0 / sampleRate));
+
+            final int delaySamples = (int) (p[4] * sampleRate / 1000f);
+            elen = Math.max(1, delaySamples);
+            ebuf = new float[elen];
+            efb = p[5];
+            emix = p[6];
+
+            reverb = p[7];
+            final int[] combLen = {1116, 1188, 1277, 1356};
+            final int[] allpLen = {556, 441};
+            comb = new float[combLen.length][];
+            combPos = new int[combLen.length];
+            combDamp = new float[combLen.length];
+            for (int i = 0; i < combLen.length; i++) {
+                comb[i] = new float[Math.max(8, Math.round(combLen[i] * sampleRate / 44100f))];
+            }
+            allp = new float[allpLen.length][];
+            allpPos = new int[allpLen.length];
+            for (int i = 0; i < allpLen.length; i++) {
+                allp[i] = new float[Math.max(8, Math.round(allpLen[i] * sampleRate / 44100f))];
+            }
+        }
+
+        float tick(float x) {
+            float y = x;
+
+            if (shift) {
+                pbuf[pw] = y;
+                final float phaseB = phase + 0.5f >= 1f ? phase - 0.5f : phase + 0.5f;
+                final float outA = readTap(phase * grain);
+                final float outB = readTap(phaseB * grain);
+                final double sa = Math.sin(Math.PI * phase);
+                final double sb = Math.sin(Math.PI * phaseB);
+                y = (float) (outA * sa * sa + outB * sb * sb);
+                pw = (pw + 1) & pmask;
+                phase += (1f - ratio) / grain;
+                phase -= (float) Math.floor(phase);
+            }
+
+            if (ringDepth > 0f) {
+                y *= (1f - ringDepth) + ringDepth * (float) Math.sin(ringPhase);
+                ringPhase += ringInc;
+                if (ringPhase > 6.2831853f) {
+                    ringPhase -= 6.2831853f;
+                }
+            }
+
+            if (bass > 0f) {
+                lowState += lpBass * (y - lowState);
+                y = (y + bass * lowState) / (1f + bass * 0.6f);
+            }
+            if (treble > 0f) {
+                highState += lpTreble * (y - highState);
+                y = (y + treble * (y - highState)) / (1f + treble * 0.4f);
+            }
+
+            if (drive > 0f) {
+                final float g = 1f + drive * 6f;
+                y = (1f - drive) * y + drive * (float) Math.tanh(y * g);
+            }
+
+            if (emix > 0f) {
+                final int ri = ew;
+                final float echo = ebuf[ri];
+                ebuf[ri] = y + echo * efb;
+                ew = ri + 1 >= elen ? 0 : ri + 1;
+                y += echo * emix;
+            }
+
+            if (reverb > 0f) {
+                float wet = 0f;
+                for (int i = 0; i < comb.length; i++) {
+                    final float[] c = comb[i];
+                    final int pos = combPos[i];
+                    final float d = c[pos];
+                    combDamp[i] = d * 0.8f + combDamp[i] * 0.2f;
+                    c[pos] = y * 0.3f + combDamp[i] * 0.84f;
+                    combPos[i] = pos + 1 >= c.length ? 0 : pos + 1;
+                    wet += d;
+                }
+                wet *= 0.25f;
+                for (int i = 0; i < allp.length; i++) {
+                    final float[] a = allp[i];
+                    final int pos = allpPos[i];
+                    final float buf = a[pos];
+                    final float out = -wet + buf;
+                    a[pos] = wet + buf * 0.5f;
+                    allpPos[i] = pos + 1 >= a.length ? 0 : pos + 1;
+                    wet = out;
+                }
+                y = y * (1f - reverb * 0.5f) + wet * reverb * 1.5f;
+            }
+
+            return y;
+        }
+
+        private float readTap(float delay) {
+            final float pos = pw - delay;
+            final int i0 = (int) Math.floor(pos);
+            final float frac = pos - i0;
+            final float a = pbuf[i0 & pmask];
+            final float b = pbuf[(i0 + 1) & pmask];
+            return a + (b - a) * frac;
+        }
+    }
+}
