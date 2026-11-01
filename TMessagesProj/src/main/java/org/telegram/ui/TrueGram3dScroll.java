@@ -9,16 +9,21 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 
 /**
- * TrueGram: 3D-прокрутка в чатах. Строки, которые ближе к краю экрана, наклоняются
- * и немного уменьшаются, как в барабане. Включается в «Оформлении» → «3D-прокрутка».
+ * TrueGram: 3D-прокрутка в чатах. Строки у краёв экрана наклоняются и немного уменьшаются,
+ * как в барабане. Включается в «Оформлении» → «3D-прокрутка в чатах».
+ *
+ * Производительность: поворот делается на аппаратном слое (LAYER_TYPE_HARDWARE), поэтому
+ * GPU просто переносит уже готовую картинку строки, а содержимое не перерисовывается.
+ * Значения меняются только если реально изменились, и никаких лишних invalidate.
  */
 public final class TrueGram3dScroll {
 
     private static final String PREFS = "truegram";
     private static final String KEY = "scroll_3d";
-    private static final float MAX_ANGLE = 14f;
-    private static final float MIN_SCALE = 0.94f;
-    private static final float CAMERA_DISTANCE_DP = 8000f;
+    private static final float MAX_ANGLE = 22f;
+    private static final float MIN_SCALE = 0.92f;
+    private static final float CAMERA_DISTANCE_DP = 6000f;
+    private static final float EPS = 0.01f;
 
     private TrueGram3dScroll() {
     }
@@ -71,13 +76,34 @@ public final class TrueGram3dScroll {
             } else if (t < -1f) {
                 t = -1f;
             }
-            child.setCameraDistance(cameraDistance);
-            child.setPivotX(child.getWidth() / 2f);
-            child.setPivotY(child.getHeight() / 2f);
-            child.setRotationX(t * MAX_ANGLE);
-            final float scale = 1f - (1f - MIN_SCALE) * Math.abs(t);
-            child.setScaleX(scale);
-            child.setScaleY(scale);
+            final float targetRot = t * MAX_ANGLE;
+            final float targetScale = 1f - (1f - MIN_SCALE) * Math.abs(t);
+
+            // rotation on a hardware layer is composited by the GPU; the content is not redrawn
+            final boolean needsLayer = Math.abs(targetRot) > 0.5f;
+            final int wantLayer = needsLayer ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
+            if (child.getLayerType() != wantLayer) {
+                child.setLayerType(wantLayer, null);
+            }
+
+            if (child.getCameraDistance() != cameraDistance) {
+                child.setCameraDistance(cameraDistance);
+            }
+            final float pivotX = child.getWidth() / 2f;
+            final float pivotY = child.getHeight() / 2f;
+            if (child.getPivotX() != pivotX) {
+                child.setPivotX(pivotX);
+            }
+            if (child.getPivotY() != pivotY) {
+                child.setPivotY(pivotY);
+            }
+            if (Math.abs(child.getRotationX() - targetRot) > EPS) {
+                child.setRotationX(targetRot);
+            }
+            if (Math.abs(child.getScaleX() - targetScale) > EPS) {
+                child.setScaleX(targetScale);
+                child.setScaleY(targetScale);
+            }
         }
     }
 }
