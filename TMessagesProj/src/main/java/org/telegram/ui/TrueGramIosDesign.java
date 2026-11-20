@@ -37,7 +37,7 @@ public final class TrueGramIosDesign {
 
     public static boolean isEnabled() {
         try {
-            return prefs().getBoolean(KEY_ENABLED, false);
+            return prefs().getBoolean(KEY_ENABLED, true);
         } catch (Throwable e) {
             return false;
         }
