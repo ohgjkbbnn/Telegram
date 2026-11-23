@@ -446,18 +446,28 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             final float gsz = dp(45);
             bounds.set(cx - gsz / 2, cy - gsz / 2, cx + gsz / 2, cy + gsz / 2);
             if (!fancy) {
-                // Stock look: just the NFT's own sticker in its place, no ball, no motion.
+                // Stock look: the NFT's colored backdrop (halo and gradient) and its sticker, no ball, no motion.
+                final float s = ascale * bounce.getScale(0.1f);
+                canvas.save();
+                canvas.translate(cx, cy);
+                canvas.scale(s, s);
+                particles.process();
+                particles.draw(canvas, color, alpha);
+                if (haloPaint != null) {
+                    haloPaint.setAlpha((int) (0xFF * alpha * (0.4f + 0.6f * glow)));
+                    canvas.drawCircle(0, 0, dp(34) * (1f + 0.35f * glow), haloPaint);
+                }
+                if (gradientPaint != null) {
+                    gradientPaint.setAlpha((int) (0xFF * alpha * gradientAlpha));
+                    canvas.drawRect(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f, gradientPaint);
+                }
                 if (emojiDrawable != null) {
-                    final float s = ascale * bounce.getScale(0.1f);
-                    canvas.save();
-                    canvas.translate(cx, cy);
-                    canvas.scale(s, s);
-                    final int sz = dp(36);
+                    final int sz = dp(24);
                     emojiDrawable.setBounds(-sz / 2, -sz / 2, sz / 2, sz / 2);
                     emojiDrawable.setAlpha((int) (0xFF * alpha));
                     emojiDrawable.draw(canvas);
-                    canvas.restore();
                 }
+                canvas.restore();
                 return;
             }
             final float scale = ascale * bounce.getScale(0.1f);
@@ -766,6 +776,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
 
             // Orbit: the NFT goes around the avatar on its own; the bass makes the ring wider.
+            if (!fancy) {
+                gift.orbitRadius = -1f;
+            }
             if (gift.orbitRadius < 0f) {
                 gift.orbitRadius = Math.max(realW, realH) / 2f + dp(34) + dp(7) * (gift.position % 2);
             }
@@ -778,6 +791,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (fancy) {
                 gx = orbitPos[0];
                 gy = orbitPos[1];
+            } else {
+                // Stock look: fixed places around the avatar, the same spacing as the 3D orbit, without motion.
+                final double stockRad = Math.toRadians(gift.position * 60.0);
+                gx = realCX + orbitR * (float) Math.cos(stockRad);
+                gy = realCY + orbitR * 0.82f * (float) Math.sin(stockRad);
             }
 
             final float collapseProgressWithEnter;
