@@ -64,6 +64,8 @@ public class TrueGramAppearanceActivity extends BaseFragment {
     private static final int ID_MSG_DELETE = 10;
     private static final int ID_SCROLL_3D = 11;
     private static final int ID_IOS_DESIGN = 12;
+    private static final int ID_NFT_SPIN = 13;
+    private static final int ID_PROFILE_MUSIC = 14;
     private static final int REQUEST_BANNER = 7310;
     private static final long MAX_BANNER_VIDEO_MS = 60_000L;
 
@@ -123,6 +125,26 @@ public class TrueGramAppearanceActivity extends BaseFragment {
         e.subtitle = "Жидкое стекло и блюр: нижняя панель, шапки чатов и поле ввода. Применяется после перезахода";
         e.trailing = TrueGramM3.TRAILING_SWITCH;
         e.shape = TrueGramM3.SHAPE_SINGLE;
+        entries.add(e);
+
+        e = new Entry();
+        e.type = T_ITEM;
+        e.id = ID_NFT_SPIN;
+        e.emoji = TrueGramM3.ICON_PALETTE;
+        e.title = "Крутить NFT";
+        e.subtitle = "NFT-подарки в профиле вращаются бесконечно и их можно крутить пальцем";
+        e.trailing = TrueGramM3.TRAILING_SWITCH;
+        e.shape = TrueGramM3.SHAPE_TOP;
+        entries.add(e);
+
+        e = new Entry();
+        e.type = T_ITEM;
+        e.id = ID_PROFILE_MUSIC;
+        e.emoji = TrueGramM3.ICON_PALETTE;
+        e.title = "Музыка в профиле";
+        e.subtitle = "Плашка с треком и балансом под шапкой профиля, как на iPhone";
+        e.trailing = TrueGramM3.TRAILING_SWITCH;
+        e.shape = TrueGramM3.SHAPE_BOTTOM;
         entries.add(e);
 
         e = new Entry();
@@ -365,6 +387,12 @@ public class TrueGramAppearanceActivity extends BaseFragment {
             refresh();
         } else if (e.id == ID_IOS_DESIGN) {
             TrueGramIosDesign.setEnabled(!TrueGramIosDesign.isEnabled());
+            refresh();
+        } else if (e.id == ID_NFT_SPIN) {
+            TrueGramIosDesign.setNftSpinEnabled(!TrueGramIosDesign.isNftSpinEnabled());
+            refresh();
+        } else if (e.id == ID_PROFILE_MUSIC) {
+            TrueGramIosDesign.setProfileMusicEnabled(!TrueGramIosDesign.isProfileMusicEnabled());
             refresh();
         } else if (e.id == ID_TYPING_ANIM) {
             AlertDialog.Builder builder = new AlertDialog.Builder(context);
@@ -869,6 +897,10 @@ public class TrueGramAppearanceActivity extends BaseFragment {
                         item.setChecked(TrueGram3dScroll.isEnabled(), false);
                     } else if (e.id == ID_IOS_DESIGN) {
                         item.setChecked(TrueGramIosDesign.isEnabled(), false);
+                    } else if (e.id == ID_NFT_SPIN) {
+                        item.setChecked(TrueGramIosDesign.isNftSpinEnabled(), false);
+                    } else if (e.id == ID_PROFILE_MUSIC) {
+                        item.setChecked(TrueGramIosDesign.isProfileMusicEnabled(), false);
                     }
                     item.setOnClickListener(v -> onItemClicked(item.getContext(), item, e));
                     break;
