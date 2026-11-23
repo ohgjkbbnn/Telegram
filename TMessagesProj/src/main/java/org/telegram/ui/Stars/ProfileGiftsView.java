@@ -182,6 +182,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public Paint haloPaint;
         /** 0..1 brightness: pulses by itself, grows while the gift is dragged. */
         public float glow = 0.5f;
+        // User-controlled position and a spring-like scale while this NFT is being moved.
+        public float offsetX, offsetY;
+        public float dragScale = 1f;
+        public final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        public final Paint bubbleRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        public final Paint bubblePatternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         public Gift(TL_stars.TL_starGiftUnique gift) {
             id = gift.id;
@@ -231,6 +237,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             spin = b.spin;
             haloPaint = b.haloPaint;
             glow = b.glow;
+            offsetX = b.offsetX;
+            offsetY = b.offsetY;
+            dragScale = b.dragScale;
         }
 
         public void draw(
@@ -258,6 +267,33 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 gradientPaint.setAlpha((int) (0xFF * alpha * gradientAlpha));
                 canvas.drawRect(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f, gradientPaint);
             }
+            // Hand-painted 3D glass bubble: tinted volume, dark lower edge and a crisp specular highlight.
+            final float bubbleRadius = dp(25);
+            final int bubbleTint = ColorUtils.setAlphaComponent(color, (int) (alpha * 105));
+            giftBubbleShader(bubblePaint, bubbleTint, bubbleRadius);
+            bubblePaint.setAlpha((int) (255 * alpha));
+            canvas.drawCircle(0, 0, bubbleRadius, bubblePaint);
+            bubbleRimPaint.setStyle(Paint.Style.STROKE);
+            bubbleRimPaint.setStrokeWidth(dp(0.8f));
+            bubbleRimPaint.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 145)));
+            canvas.drawCircle(0, 0, bubbleRadius - dp(0.5f), bubbleRimPaint);
+            canvas.save();
+            android.graphics.Path bubbleClip = new android.graphics.Path();
+            bubbleClip.addCircle(0, 0, bubbleRadius - dp(1), android.graphics.Path.Direction.CW);
+            canvas.clipPath(bubbleClip);
+            bubblePatternPaint.setStyle(Paint.Style.STROKE);
+            bubblePatternPaint.setStrokeWidth(dp(0.8f));
+            bubblePatternPaint.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 105)));
+            // A subtle orbit pattern inherits the NFT backdrop color instead of using a generic white badge.
+            canvas.drawArc(-bubbleRadius * .72f, -bubbleRadius * .48f, bubbleRadius * .72f, bubbleRadius * .96f, 205, 235, false, bubblePatternPaint);
+            canvas.drawCircle(-bubbleRadius * .28f, bubbleRadius * .18f, dp(2.1f), bubblePatternPaint);
+            canvas.drawCircle(bubbleRadius * .34f, -bubbleRadius * .12f, dp(1.5f), bubblePatternPaint);
+            canvas.restore();
+            bubblePaint.setShader(new RadialGradient(-bubbleRadius * .38f, -bubbleRadius * .48f, bubbleRadius * .72f,
+                    new int[]{ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 210)), ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 45)), Color.TRANSPARENT},
+                    new float[]{0f, .28f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawCircle(0, 0, bubbleRadius, bubblePaint);
+            bubblePaint.setShader(null);
             if (emojiDrawable != null) {
                 final int sz = dp(24);
                 emojiDrawable.setBounds(-sz / 2, -sz / 2, sz / 2, sz / 2);
@@ -266,6 +302,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
             canvas.restore();
         }
+    }
+
+    private static void giftBubbleShader(Paint paint, int tint, float radius) {
+        final int mid = ColorUtils.setAlphaComponent(tint, Color.alpha(tint));
+        final int dark = ColorUtils.setAlphaComponent(ColorUtils.blendARGB(tint, Color.BLACK, .48f), Color.alpha(tint));
+        paint.setShader(new RadialGradient(-radius * .30f, -radius * .36f, radius * 1.35f,
+                new int[]{ColorUtils.setAlphaComponent(Color.WHITE, 105), mid, dark},
+                new float[]{0f, .48f, 1f}, Shader.TileMode.CLAMP));
     }
 
     private StarsController.GiftsList list;
@@ -420,14 +464,23 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         float expandScale = expandY / maxExpandY;
         float closedAlpha = Utilities.clamp01((expandY - (AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight())) / dp(50));
 
-        // white highlight around the avatar (the "earth"), brighter while a gift is turned by hand
-        final float ringAlpha = (rotatingGift ? 1f : 0.8f) * (1f - expandProgress) * (1f - actionBarProgress) * closedAlpha;
+        // Thin white orbit. Only the arc nearest each NFT gets a stronger, localized glow.
+        final float ringAlpha = (1f - expandProgress) * (1f - actionBarProgress) * closedAlpha;
         if (ringAlpha > 0f) {
             ringPaint.setStyle(Paint.Style.STROKE);
-            ringPaint.setStrokeWidth(dp(3));
+            ringPaint.setStrokeWidth(dp(1f));
             ringPaint.setColor(Color.WHITE);
-            ringPaint.setAlpha((int) (0xFF * ringAlpha));
-            canvas.drawCircle(realCX, realCY, realW / 2f + dp(3), ringPaint);
+            ringPaint.setAlpha((int) (105 * ringAlpha));
+            final RectF orbit = new RectF(realCX - realW / 2f - dp(2), realCY - realH / 2f - dp(2), realCX + realW / 2f + dp(2), realCY + realH / 2f + dp(2));
+            canvas.drawOval(orbit, ringPaint);
+            ringPaint.setStrokeWidth(dp(2.2f));
+            for (int i = 0; i < gifts.size(); i++) {
+                Gift near = gifts.get(i);
+                float a = (float) Math.toDegrees(Math.atan2(near.bounds.centerY() - realCY, near.bounds.centerX() - realCX));
+                float glowAlpha = ringAlpha * (near == pressedGift ? 1f : .72f);
+                ringPaint.setAlpha((int) (220 * glowAlpha));
+                canvas.drawArc(orbit, a - 19f, 38f, false, ringPaint);
+            }
         }
 
         final float pulse = 0.5f + 0.5f * (float) Math.sin(SystemClock.uptimeMillis() / 600.0);
@@ -497,11 +550,24 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 scale = AndroidUtilities.lerp(scale / 2f, scale, collapse);
             }
 
-            // NFT spin: the gift turns endlessly, unless the user is turning this one by hand right now
+            gx += gift.offsetX;
+            gy += gift.offsetY;
+            gift.dragScale += ((gift == pressedGift && draggingGift ? 1.32f : 1f) - gift.dragScale) * .22f;
+            scale *= gift.dragScale;
+            if (globalRotation != 0f) {
+                double radians = Math.toRadians(globalRotation);
+                float dx = gx - realCX;
+                float dy = gy - realCY;
+                float rx = (float) (dx * Math.cos(radians) - dy * Math.sin(radians));
+                float ry = (float) (dx * Math.sin(radians) + dy * Math.cos(radians));
+                gx = realCX + rx;
+                gy = realCY + ry;
+            }
+
+            // NFT spin: the gift turns endlessly, unless the user is moving this one by hand.
             if (TrueGramIosDesign.isNftSpinEnabled() && !dragged) {
                 gift.spin = (gift.spin + SPIN_STEP_DEG) % 360f;
             }
-
             gift.draw(canvas, gx, gy, scale, gift.spin, alpha, gift.glow);
         }
 
@@ -523,7 +589,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     private Gift pressedGift;
     private boolean rotatingGift;
+    private boolean draggingGift;
+    private boolean rotatingAll;
     private float touchDownX, touchDownY, lastTouchAngle;
+    private float lastTouchX, lastTouchY;
+    private float globalRotation;
     private int touchSlop = -1;
 
     /** Angle of the finger around the gift center, in degrees. */
@@ -533,63 +603,103 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (!active) return false;
+        if (!active || gifts.isEmpty()) return false;
         if (touchSlop < 0) {
             touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         }
         final float x = event.getX();
         final float y = event.getY();
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_DOWN: {
                 pressedGift = getGiftUnder(x, y);
                 rotatingGift = false;
-                touchDownX = x;
-                touchDownY = y;
+                draggingGift = false;
+                rotatingAll = false;
+                touchDownX = lastTouchX = x;
+                touchDownY = lastTouchY = y;
                 if (pressedGift != null) {
                     pressedGift.bounce.setPressed(true);
                     lastTouchAngle = angleTo(pressedGift, x, y);
-                    if (getParent() != null) {
-                        getParent().requestDisallowInterceptTouchEvent(true);
-                    }
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                }
+                // Empty-space gesture rotates the whole NFT constellation around the avatar.
+                float avatarX = avatarContainer.getX() + avatarContainer.getWidth() * avatarContainer.getScaleX() / 2f;
+                float avatarY = avatarContainer.getY() + avatarContainer.getHeight() * avatarContainer.getScaleY() / 2f;
+                if (Math.hypot(x - avatarX, y - avatarY) <= dp(132)) {
+                    rotatingAll = true;
+                    lastTouchAngle = (float) Math.toDegrees(Math.atan2(y - avatarY, x - avatarX));
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                     return true;
                 }
                 return false;
-            case MotionEvent.ACTION_MOVE:
-                if (pressedGift == null) return false;
-                if (!rotatingGift && Math.hypot(x - touchDownX, y - touchDownY) > touchSlop) {
-                    // a drag turns the gift, a short tap opens it
-                    rotatingGift = true;
-                    pressedGift.bounce.setPressed(false);
-                }
-                if (rotatingGift) {
-                    final float angle = angleTo(pressedGift, x, y);
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (pressedGift == null && !rotatingAll) return false;
+                if (pressedGift != null) {
+                    if (!draggingGift && Math.hypot(x - touchDownX, y - touchDownY) > touchSlop) {
+                        draggingGift = true;
+                        rotatingGift = true;
+                        pressedGift.bounce.setPressed(false);
+                    }
+                    if (draggingGift) {
+                        float dx = x - lastTouchX;
+                        float dy = y - lastTouchY;
+                        pressedGift.offsetX += dx;
+                        pressedGift.offsetY += dy;
+                        // Gently nudge nearby gifts out of the way; the dragged NFT remains fully controlled.
+                        for (Gift other : gifts) {
+                            if (other == pressedGift) continue;
+                            float ox = other.bounds.centerX() - x;
+                            float oy = other.bounds.centerY() - y;
+                            float distance = (float) Math.hypot(ox, oy);
+                            float pushRadius = dp(62);
+                            if (distance < pushRadius) {
+                                float force = (pushRadius - distance) / pushRadius * .42f;
+                                float safe = Math.max(dp(1), distance);
+                                other.offsetX += ox / safe * force * dx;
+                                other.offsetY += oy / safe * force * dy;
+                            }
+                        }
+                        invalidate();
+                    }
+                } else if (rotatingAll) {
+                    float avatarX = avatarContainer.getX() + avatarContainer.getWidth() * avatarContainer.getScaleX() / 2f;
+                    float avatarY = avatarContainer.getY() + avatarContainer.getHeight() * avatarContainer.getScaleY() / 2f;
+                    float angle = (float) Math.toDegrees(Math.atan2(y - avatarY, x - avatarX));
                     float delta = angle - lastTouchAngle;
                     if (delta > 180f) delta -= 360f;
                     if (delta < -180f) delta += 360f;
-                    pressedGift.spin = (pressedGift.spin + delta) % 360f;
+                    globalRotation = (globalRotation + delta) % 360f;
                     lastTouchAngle = angle;
                     invalidate();
                 }
+                lastTouchX = x;
+                lastTouchY = y;
                 return true;
-            case MotionEvent.ACTION_UP:
+            }
+            case MotionEvent.ACTION_UP: {
                 if (pressedGift != null) {
                     pressedGift.bounce.setPressed(false);
-                    if (!rotatingGift) {
-                        onGiftClick(pressedGift);
-                    }
+                    if (!draggingGift) onGiftClick(pressedGift);
                 }
                 pressedGift = null;
                 rotatingGift = false;
+                draggingGift = false;
+                rotatingAll = false;
+                invalidate();
                 return true;
+            }
             case MotionEvent.ACTION_CANCEL:
-                if (pressedGift != null) {
-                    pressedGift.bounce.setPressed(false);
-                }
+                if (pressedGift != null) pressedGift.bounce.setPressed(false);
                 pressedGift = null;
                 rotatingGift = false;
+                draggingGift = false;
+                rotatingAll = false;
+                invalidate();
                 return true;
         }
-        return pressedGift != null;
+        return pressedGift != null || rotatingAll;
     }
 
     public void onGiftClick(Gift gift) {
