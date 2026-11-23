@@ -47,6 +47,7 @@ import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.ChatMessageCell;
 import org.telegram.ui.ProfileActivity;
+import org.telegram.ui.TrueGramIosDesign;
 import org.telegram.ui.TrueGramM3;
 
 import java.util.ArrayList;
@@ -60,6 +61,8 @@ public class ProfileActionsView extends View {
     private final List<Action> actions = new ArrayList<>();
     private final Paint paint = new Paint();
     private final Paint shaderPaint = new Paint();
+    private final Paint iosFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint iosRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float parentExpanded;
 
     public boolean isAnimatingCallAction = false;
@@ -358,8 +361,10 @@ public class ProfileActionsView extends View {
                         }
                     }
 
-                    canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, paint);
-                    if (!useM3 && radialGradient != null) {
+                    if (!iosStyle()) {
+                        canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, paint);
+                    }
+                    if (!iosStyle() && !useM3 && radialGradient != null) {
                         int wasAlpha2 = shaderPaint.getAlpha();
                         shaderPaint.setAlpha((int) (action.getAlpha() * alphaFraction1 * wasAlpha2));
                         matrix.setTranslate(AndroidUtilities.rectTmp.left, AndroidUtilities.rectTmp.top);
@@ -428,6 +433,16 @@ public class ProfileActionsView extends View {
         }
     }
 
+    /** iOS design switch: round glass buttons instead of the wide rectangles. */
+    private boolean iosStyle() {
+        return TrueGramIosDesign.isEnabled();
+    }
+
+    /** Diameter of an iOS glass button. */
+    private float iosCircleSize() {
+        return dp(50);
+    }
+
     private void updateBounds(Action action) {
         final float cx = action.rect.centerX();
         final float cy = action.rect.centerY();
@@ -437,7 +452,10 @@ public class ProfileActionsView extends View {
 
         action.text.setMaxWidth(action.rect.width() - dp(2));
         action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
-        final float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
+        float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
+        if (iosStyle()) {
+            drawableTop = action.rect.top + dp(4) + (iosCircleSize() - drawableSize) / 2f;
+        }
         action.setBounds(
             (int) (cx - drawableR),
             (int) (drawableTop),
@@ -478,7 +496,26 @@ public class ProfileActionsView extends View {
 
         updateBounds(action);
 
-        final float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
+        float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
+        if (iosStyle()) {
+            final float d = iosCircleSize();
+            final float circleCy = action.rect.top + dp(4) + d / 2f;
+            // Frosted glass: translucent tint, a light edge and a soft highlight at the top.
+            final int base = Theme.getColor(Theme.key_windowBackgroundWhite);
+            iosFillPaint.setStyle(Paint.Style.FILL);
+            iosFillPaint.setColor(TrueGramIosDesign.glassSurfaceColor(base));
+            iosFillPaint.setAlpha((int) (255 * alpha));
+            canvas.drawCircle(cx, circleCy, d / 2f, iosFillPaint);
+            iosFillPaint.setColor(TrueGramIosDesign.glassTintColor(base));
+            iosFillPaint.setAlpha((int) (255 * alpha));
+            canvas.drawCircle(cx, circleCy, d / 2f, iosFillPaint);
+            iosRimPaint.setStyle(Paint.Style.STROKE);
+            iosRimPaint.setStrokeWidth(dp(1));
+            iosRimPaint.setColor(TrueGramIosDesign.glassStrokeColor());
+            iosRimPaint.setAlpha((int) (255 * alpha));
+            canvas.drawCircle(cx, circleCy, d / 2f - dp(0.5f), iosRimPaint);
+            textY = circleCy + d / 2f + dp(6);
+        }
         canvas.save();
         canvas.scale(action.textScale, action.textScale, cx, textY + action.text.getHeight() * action.textScale / 2.0f);
         action.text.draw(canvas, cx - action.text.getWidth() / 2f, textY, textColor, alpha);
