@@ -216,11 +216,11 @@
     <string name="Page5Title">Мощный</string>
     <string name="Page6Title">Облачный</string>
     <string name="Page1Message">Самый **быстрый** мессенджер в мире.\n**Бесплатный** и **безопасный**.</string>
-    <string name="Page2Message">**TrueGram** доставляет сообщения быстрее\nлюбого другого приложения.</string>
-    <string name="Page3Message">**TrueGram** предоставляет бесплатное безлимитное облачное хранилище для чатов и медиа.\n</string>
-    <string name="Page4Message">**TrueGram** защищает Вашу переписку от злоумышленников.</string>
-    <string name="Page5Message">**TrueGram** не ограничивает размер\n Ваших медиафайлов и чатов.</string>
-    <string name="Page6Message">В **TrueGram** можно переписываться с любого количества устройств.</string>
+    <string name="Page2Message">**Telegram** доставляет сообщения быстрее\nлюбого другого приложения.</string>
+    <string name="Page3Message">**Telegram** предоставляет бесплатное безлимитное облачное хранилище для чатов и медиа.\n</string>
+    <string name="Page4Message">**Telegram** защищает Вашу переписку от злоумышленников.</string>
+    <string name="Page5Message">**Telegram** не ограничивает размер\n Ваших медиафайлов и чатов.</string>
+    <string name="Page6Message">В **Telegram** можно переписываться с любого количества устройств.</string>
     <string name="StartMessaging">Начать общение</string>
     <!--date formatters-->
     <string name="formatterBoostExpired">dd MMM yyyy</string>
@@ -263,9 +263,4 @@
     <string name="RemindTodayAt">\'Отправить сегодня в\' HH:mm</string>
     <string name="RemindDayAt">\'Отправить\' d MMM \'в\' HH:mm</string>
     <string name="RemindDayYearAt">\'Напомнить\' d MMM yyyy \'в\' HH:mm</string>
-    <string name="Gift2DeleteOption">Удалить подарок</string>
-    <string name="Gift2DeleteText">Вы хотите удалить этот подарок?\n\nОн исчезнет из профиля, восстановить его будет нельзя.</string>
-    <string name="Gift2Deleted">Подарок удалён</string>
-    <string name="Delete">Удалить</string>
-    <string name="Cancel">Отмена</string>
 </resources>
