@@ -4,29 +4,27 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.view.Gravity;
 import android.view.View;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
-import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.LayoutHelper;
 
 /**
- * TrueGram: "Дизайн iOS" switch (Оформление). Applies a glass-like look to the
- * translucent liquid-glass surfaces used by the tab bar, chat header and composer.
- * Screen-level blur sources are created when a screen opens, so reopen the screen
- * after changing the switch.
+ * TrueGram: "Дизайн" section of Оформление.
+ * - "Дизайн iOS": glass-like look of translucent surfaces (tab bar, chat header, composer).
+ * - "Крутить NFT": animated NFT gifts in the profile spin endlessly and can be turned by hand.
+ * - "Музыка в профиле": the profile music bar (track + balance) like on iOS.
+ * Screen-level blur sources are created when a screen opens, so reopen the screen after changing a switch.
  */
 public final class TrueGramIosDesign {
 
     private static final String PREFS = "truegram";
     private static final String KEY_ENABLED = "ios_design";
+    private static final String KEY_NFT_SPIN = "nft_spin";
+    private static final String KEY_PROFILE_MUSIC = "profile_music";
 
     private TrueGramIosDesign() {
     }
@@ -46,6 +44,38 @@ public final class TrueGramIosDesign {
     public static void setEnabled(boolean value) {
         try {
             prefs().edit().putBoolean(KEY_ENABLED, value).apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** On by default, like on iOS: NFT gifts in the profile keep rotating. */
+    public static boolean isNftSpinEnabled() {
+        try {
+            return prefs().getBoolean(KEY_NFT_SPIN, true);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static void setNftSpinEnabled(boolean value) {
+        try {
+            prefs().edit().putBoolean(KEY_NFT_SPIN, value).apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** On by default: the profile shows the music bar (track and balance). */
+    public static boolean isProfileMusicEnabled() {
+        try {
+            return prefs().getBoolean(KEY_PROFILE_MUSIC, true);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static void setProfileMusicEnabled(boolean value) {
+        try {
+            prefs().edit().putBoolean(KEY_PROFILE_MUSIC, value).apply();
         } catch (Throwable ignored) {
         }
     }
