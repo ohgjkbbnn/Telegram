@@ -142,7 +142,7 @@ public class TrueGramAppearanceActivity extends BaseFragment {
         e.id = ID_PROFILE_MUSIC;
         e.emoji = TrueGramM3.ICON_PALETTE;
         e.title = "Музыка в профиле";
-        e.subtitle = "Плашка с треком и балансом под шапкой профиля, как на iPhone";
+        e.subtitle = "Плашка с треком под шапкой профиля, если будет данная функция выключена, то музыки в профиле не будет.";
         e.trailing = TrueGramM3.TRAILING_SWITCH;
         e.shape = TrueGramM3.SHAPE_BOTTOM;
         entries.add(e);
