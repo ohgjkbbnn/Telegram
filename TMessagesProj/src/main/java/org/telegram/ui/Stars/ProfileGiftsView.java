@@ -26,6 +26,7 @@ import android.view.animation.LinearInterpolator;
 import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.Utilities;
@@ -38,6 +39,7 @@ import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CubicBezierInterpolator;
+import org.telegram.ui.Components.TrueGramBassMeter;
 import org.telegram.ui.ProfileActivity;
 import org.telegram.ui.TrueGramIosDesign;
 
@@ -149,6 +151,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        bassMeter.stop();
 
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.starUserGiftsLoaded);
 
@@ -163,6 +166,21 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if ((long) args[0] == dialogId) {
                 update();
             }
+        }
+    }
+
+    /** A damped spring: soft, slightly bouncy motion, the "silicone slime" feel. */
+    static final class Spring {
+        float x, v;
+
+        Spring(float x0) {
+            x = x0;
+        }
+
+        void step(float target, float stiffness, float damping, float dt) {
+            final float a = (target - x) * stiffness - v * damping;
+            v += a * dt;
+            x += v * dt;
         }
     }
 
@@ -183,8 +201,19 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         /** 0..1 brightness: pulses by itself, grows while the gift is dragged. */
         public float glow = 0.5f;
         // User-controlled position and a spring-like scale while this NFT is being moved.
-        public float offsetX, offsetY;
+        // Orbit angle around the avatar, degrees: the NFT travels around by itself.
+        public float orbitAngle;
+        // Soft "slime" motion: the finger moves the targets, springs follow them with lag and wobble.
+        public float targetOffX, targetOffY;
+        public Spring offSpringX = new Spring(0f), offSpringY = new Spring(0f);
+        public float targetTurn;
+        public Spring turn = new Spring(0f);
+        public Spring squash = new Spring(0f);
+        public Spring dragSpring = new Spring(1f);
         public float dragScale = 1f;
+        public float stretchX = 1f, stretchY = 1f;
+        // 0..1 bass level of the playing music: makes the NFT jump.
+        public float bass;
         public final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         public final Paint bubbleRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         public final Paint bubblePatternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -237,8 +266,18 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             spin = b.spin;
             haloPaint = b.haloPaint;
             glow = b.glow;
-            offsetX = b.offsetX;
-            offsetY = b.offsetY;
+            orbitAngle = b.orbitAngle;
+            targetOffX = b.targetOffX;
+            targetOffY = b.targetOffY;
+            offSpringX = b.offSpringX;
+            offSpringY = b.offSpringY;
+            targetTurn = b.targetTurn;
+            turn = b.turn;
+            squash = b.squash;
+            dragSpring = b.dragSpring;
+            bass = b.bass;
+            stretchX = b.stretchX;
+            stretchY = b.stretchY;
             dragScale = b.dragScale;
         }
 
@@ -256,7 +295,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             canvas.translate(cx, cy);
             canvas.rotate(rotate);
             final float scale = ascale * bounce.getScale(0.1f);
-            canvas.scale(scale, scale);
+            canvas.scale(scale * stretchX, scale * stretchY);
             particles.process();
             particles.draw(canvas, color, alpha);
             if (haloPaint != null) {
@@ -425,6 +464,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 final Gift g = gifts.get(i);
                 if (g.position == -1) {
                     g.position = bagRandomizer.next();
+                    g.orbitAngle = g.position * 60f;
                 }
             }
         }
@@ -439,6 +479,30 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         if (gifts.isEmpty() || expandProgress >= 1.0f || collapseProgress <= 0f) return;
+
+        final long now = SystemClock.uptimeMillis();
+        final float dt = lastFrameTime == 0 ? 1f / 60f : Math.min(1f / 30f, (now - lastFrameTime) / 1000f);
+        lastFrameTime = now;
+
+        // Keep clear of the profile buttons and the music bar, wherever they are on screen right now.
+        if (avoidProvider != null) {
+            avoidRects.clear();
+            final View[] views = avoidProvider.getViews();
+            if (views != null) {
+                for (View v : views) {
+                    addAvoidRect(v);
+                }
+            }
+        }
+        // Bass of the music that is playing; no music, no jumps.
+        final MediaController mc = MediaController.getInstance();
+        final boolean musicPlaying = mc.isPlayingMessage(mc.getPlayingMessageObject()) && !mc.isMessagePaused();
+        if (musicPlaying) {
+            bassMeter.start();
+        } else {
+            bassMeter.stop();
+        }
+        audioLevel = musicPlaying ? bassMeter.getLevel() : 0f;
 
         final float realX = avatarContainer.getX();
         final float realY = avatarContainer.getY();
@@ -530,6 +594,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     break;
             }
 
+            // Orbit: the NFT goes around the avatar on its own; the bass makes the ring wider.
+            final float orbitR = Math.max(realW, realH) / 2f + dp(34) + dp(7) * (gift.position % 2) + dp(10) * gift.bass;
+            final double orbitRad = Math.toRadians(gift.orbitAngle);
+            final float[] orbitPos = {realCX + orbitR * (float) Math.cos(orbitRad), realCY + orbitR * 0.82f * (float) Math.sin(orbitRad)};
+            for (RectF r : avoidRects) {
+                pushOutOf(orbitPos, r, dp(20));
+            }
+            gx = orbitPos[0];
+            gy = orbitPos[1];
+
             final float collapseProgressWithEnter;
             if (isOpening || enter >= 1f) {
                 collapseProgressWithEnter = collapseProgress;
@@ -550,10 +624,30 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 scale = AndroidUtilities.lerp(scale / 2f, scale, collapse);
             }
 
-            gx += gift.offsetX;
-            gy += gift.offsetY;
-            gift.dragScale += ((gift == pressedGift && draggingGift ? 1.32f : 1f) - gift.dragScale) * .22f;
-            scale *= gift.dragScale;
+            // Physics: springs make the NFT lag, stretch, wobble and snap back like silicone.
+            gift.bass += (audioLevel - gift.bass) * 0.35f;
+            if (!dragged) {
+                gift.orbitAngle = (gift.orbitAngle + ORBIT_DEG_PER_SEC * dt) % 360f;
+            }
+            if (gift != pressedGift || !draggingGift) {
+                gift.targetOffX *= 0.94f;
+                gift.targetOffY *= 0.94f;
+                gift.targetTurn *= 0.9f;
+            }
+            gift.offSpringX.step(gift.targetOffX, 180f, 12f, dt);
+            gift.offSpringY.step(gift.targetOffY, 180f, 12f, dt);
+            final float speed = (float) Math.hypot(gift.offSpringX.v, gift.offSpringY.v);
+            gift.squash.step(Utilities.clamp01(speed * 0.0006f) * 0.35f, 200f, 13f, dt);
+            gift.turn.step(gift.targetTurn, 140f, 11f, dt);
+            gift.dragSpring.step(gift == pressedGift && draggingGift ? 1.32f : 1f, 260f, 14f, dt);
+            gift.dragScale = gift.dragSpring.x;
+            // Turned by hand, the NFT narrows like a card flipping, so its patterns are seen from the side.
+            final float flip = Math.max(0.2f, (float) Math.abs(Math.cos(Math.toRadians(gift.turn.x))));
+            gift.stretchX = (1f + gift.squash.x) * flip;
+            gift.stretchY = 1f - 0.6f * gift.squash.x;
+            gx += gift.offSpringX.x;
+            gy += gift.offSpringY.x;
+            scale *= gift.dragScale * (1f + 0.12f * gift.bass);
             if (globalRotation != 0f) {
                 double radians = Math.toRadians(globalRotation);
                 float dx = gx - realCX;
@@ -577,6 +671,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     private static final float SPIN_STEP_DEG = 0.9f;
+    private final TrueGramBassMeter bassMeter = new TrueGramBassMeter();
+    private AvoidProvider avoidProvider;
+    private static final float ORBIT_DEG_PER_SEC = 24f;
+    private long lastFrameTime;
+    private float audioLevel;
+    private final ArrayList<RectF> avoidRects = new ArrayList<>();
     private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public Gift getGiftUnder(float x, float y) {
@@ -645,8 +745,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     if (draggingGift) {
                         float dx = x - lastTouchX;
                         float dy = y - lastTouchY;
-                        pressedGift.offsetX += dx;
-                        pressedGift.offsetY += dy;
+                        pressedGift.targetOffX += dx;
+                        pressedGift.targetOffY += dy;
+                        // Turning with the finger: the NFT spins around its own center and tilts toward the finger.
+                        final float angleNow = angleTo(pressedGift, x, y);
+                        float turnDelta = angleNow - lastTouchAngle;
+                        if (turnDelta > 180f) turnDelta -= 360f;
+                        if (turnDelta < -180f) turnDelta += 360f;
+                        pressedGift.spin += turnDelta;
+                        lastTouchAngle = angleNow;
+                        pressedGift.targetTurn = Math.max(-75f, Math.min(75f, pressedGift.targetTurn + dx * 0.6f));
                         // Gently nudge nearby gifts out of the way; the dragged NFT remains fully controlled.
                         for (Gift other : gifts) {
                             if (other == pressedGift) continue;
@@ -657,8 +765,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                             if (distance < pushRadius) {
                                 float force = (pushRadius - distance) / pushRadius * .42f;
                                 float safe = Math.max(dp(1), distance);
-                                other.offsetX += ox / safe * force * dx;
-                                other.offsetY += oy / safe * force * dy;
+                                other.targetOffX += ox / safe * force * dx;
+                                other.targetOffY += oy / safe * force * dy;
                             }
                         }
                         invalidate();
@@ -700,6 +808,54 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 return true;
         }
         return pressedGift != null || rotatingAll;
+    }
+
+    /** Gives the views the NFTs must stay away from (the profile buttons, the music bar). Read on every frame. */
+    public interface AvoidProvider {
+        View[] getViews();
+    }
+
+    public void setAvoidProvider(AvoidProvider provider) {
+        avoidProvider = provider;
+    }
+
+    private void addAvoidRect(View v) {
+        if (v == null || v.getVisibility() != View.VISIBLE || v.getWidth() == 0 || v.getHeight() == 0) {
+            return;
+        }
+        final int[] a = new int[2];
+        final int[] b = new int[2];
+        v.getLocationInWindow(a);
+        getLocationInWindow(b);
+        final float left = a[0] - b[0];
+        final float top = a[1] - b[1];
+        avoidRects.add(new RectF(left, top, left + v.getWidth(), top + v.getHeight()));
+    }
+
+    /** Areas (in this view's coordinates) the NFTs must not cover, e.g. the profile buttons and the music bar. */
+    public void setAvoidRects(List<RectF> rects) {
+        avoidRects.clear();
+        if (rects != null) {
+            avoidRects.addAll(rects);
+        }
+        invalidate();
+    }
+
+    /** Bass level of the music, 0..1. The NFTs jump with it. Nothing moves until this gets a value. */
+    public void setAudioLevel(float level) {
+        audioLevel = Utilities.clamp01(level);
+    }
+
+    /** Moves point p out of the rect (with padding) through its nearest edge. */
+    private static void pushOutOf(float[] p, RectF r, float pad) {
+        final float l = r.left - pad, t = r.top - pad, rt = r.right + pad, b = r.bottom + pad;
+        if (p[0] <= l || p[0] >= rt || p[1] <= t || p[1] >= b) return;
+        final float dl = p[0] - l, dr = rt - p[0], dt = p[1] - t, db = b - p[1];
+        final float m = Math.min(Math.min(dl, dr), Math.min(dt, db));
+        if (m == dl) p[0] = l;
+        else if (m == dr) p[0] = rt;
+        else if (m == dt) p[1] = t;
+        else p[1] = b;
     }
 
     public void onGiftClick(Gift gift) {
