@@ -13,8 +13,13 @@ import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.Color;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+
+import androidx.core.graphics.ColorUtils;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
 
@@ -34,6 +39,7 @@ import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.ProfileActivity;
+import org.telegram.ui.TrueGramIosDesign;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -170,6 +176,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         private StarsReactionsSheet.Particles particles;
 
         public int position = -1;
+        /** Current rotation of the gift in degrees: grows by itself (NFT spin) and changes when the gift is turned by hand. */
+        public float spin;
+        /** Soft colored halo behind the gift (its backdrop color). */
+        public Paint haloPaint;
+        /** 0..1 brightness: pulses by itself, grows while the gift is dragged. */
+        public float glow = 0.5f;
 
         public Gift(TL_stars.TL_starGiftUnique gift) {
             id = gift.id;
@@ -216,6 +228,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             animatedFloat = b.animatedFloat;
             particles = b.particles;
             position = b.position;
+            spin = b.spin;
+            haloPaint = b.haloPaint;
+            glow = b.glow;
         }
 
         public void draw(
@@ -235,6 +250,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             canvas.scale(scale, scale);
             particles.process();
             particles.draw(canvas, color, alpha);
+            if (haloPaint != null) {
+                haloPaint.setAlpha((int) (0xFF * alpha * (0.4f + 0.6f * glow)));
+                canvas.drawCircle(0, 0, dp(34) * (1f + 0.35f * glow), haloPaint);
+            }
             if (gradientPaint != null) {
                 gradientPaint.setAlpha((int) (0xFF * alpha * gradientAlpha));
                 canvas.drawRect(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f, gradientPaint);
@@ -318,6 +337,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 g.gradient = new RadialGradient(0, 0, dp(22.5f), new int[]{g.color, Theme.multAlpha(g.color, 0.0f)}, new float[]{0, 1}, Shader.TileMode.CLAMP);
                 g.gradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
                 g.gradientPaint.setShader(g.gradient);
+                g.haloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                g.haloPaint.setShader(new RadialGradient(0, 0, dp(34), new int[]{ColorUtils.setAlphaComponent(g.color, 0xB0), ColorUtils.setAlphaComponent(g.color, 0)}, new float[]{0.3f, 1f}, Shader.TileMode.CLAMP));
                 if (g.document != null) {
                     g.emojiDrawable = AnimatedEmojiDrawable.make(currentAccount, AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, g.document);
                 } else {
@@ -399,10 +420,25 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         float expandScale = expandY / maxExpandY;
         float closedAlpha = Utilities.clamp01((expandY - (AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight())) / dp(50));
 
+        // white highlight around the avatar (the "earth"), brighter while a gift is turned by hand
+        final float ringAlpha = (rotatingGift ? 1f : 0.8f) * (1f - expandProgress) * (1f - actionBarProgress) * closedAlpha;
+        if (ringAlpha > 0f) {
+            ringPaint.setStyle(Paint.Style.STROKE);
+            ringPaint.setStrokeWidth(dp(3));
+            ringPaint.setColor(Color.WHITE);
+            ringPaint.setAlpha((int) (0xFF * ringAlpha));
+            canvas.drawCircle(realCX, realCY, realW / 2f + dp(3), ringPaint);
+        }
+
+        final float pulse = 0.5f + 0.5f * (float) Math.sin(SystemClock.uptimeMillis() / 600.0);
+
         for (int i = 0; i < gifts.size(); ++i) {
             final Gift gift = gifts.get(i);
             final float enter = gift.animatedFloat.set(1.0f);
-            float scale = lerp(0.5f, 1.0f, enter);
+            final boolean dragged = gift == pressedGift && rotatingGift;
+            final float glowTarget = dragged ? 1f : 0.5f + 0.4f * pulse;
+            gift.glow += (glowTarget - gift.glow) * 0.2f;
+            float scale = lerp(0.5f, 1.0f, enter) * (1f + 0.25f * Math.max(0f, gift.glow - 0.5f) * 2f);
             final float alpha = enter * (1.0f - expandProgress) * (1.0f - actionBarProgress) * (closedAlpha);
 
             float gx, gy;
@@ -461,11 +497,21 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 scale = AndroidUtilities.lerp(scale / 2f, scale, collapse);
             }
 
-            gift.draw(canvas, gx, gy, scale, 0, alpha, 1f);
+            // NFT spin: the gift turns endlessly, unless the user is turning this one by hand right now
+            if (TrueGramIosDesign.isNftSpinEnabled() && !dragged) {
+                gift.spin = (gift.spin + SPIN_STEP_DEG) % 360f;
+            }
+
+            gift.draw(canvas, gx, gy, scale, gift.spin, alpha, gift.glow);
         }
 
         canvas.restore();
+        // keeps the gifts pulsing and spinning while they are on screen
+        postInvalidateOnAnimation();
     }
+
+    private static final float SPIN_STEP_DEG = 0.9f;
+    private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public Gift getGiftUnder(float x, float y) {
         for (int i = 0; i < gifts.size(); ++i) {
@@ -476,32 +522,72 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     private Gift pressedGift;
+    private boolean rotatingGift;
+    private float touchDownX, touchDownY, lastTouchAngle;
+    private int touchSlop = -1;
+
+    /** Angle of the finger around the gift center, in degrees. */
+    private static float angleTo(Gift gift, float x, float y) {
+        return (float) Math.toDegrees(Math.atan2(y - gift.bounds.centerY(), x - gift.bounds.centerX()));
+    }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!active) return false;
-        final Gift hit = getGiftUnder(event.getX(), event.getY());
-        if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            pressedGift = hit;
-            if (pressedGift != null) {
-                pressedGift.bounce.setPressed(true);
-            }
-        } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
-            if (pressedGift != hit && pressedGift != null) {
-                pressedGift.bounce.setPressed(false);
+        if (touchSlop < 0) {
+            touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        }
+        final float x = event.getX();
+        final float y = event.getY();
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                pressedGift = getGiftUnder(x, y);
+                rotatingGift = false;
+                touchDownX = x;
+                touchDownY = y;
+                if (pressedGift != null) {
+                    pressedGift.bounce.setPressed(true);
+                    lastTouchAngle = angleTo(pressedGift, x, y);
+                    if (getParent() != null) {
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    return true;
+                }
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (pressedGift == null) return false;
+                if (!rotatingGift && Math.hypot(x - touchDownX, y - touchDownY) > touchSlop) {
+                    // a drag turns the gift, a short tap opens it
+                    rotatingGift = true;
+                    pressedGift.bounce.setPressed(false);
+                }
+                if (rotatingGift) {
+                    final float angle = angleTo(pressedGift, x, y);
+                    float delta = angle - lastTouchAngle;
+                    if (delta > 180f) delta -= 360f;
+                    if (delta < -180f) delta += 360f;
+                    pressedGift.spin = (pressedGift.spin + delta) % 360f;
+                    lastTouchAngle = angle;
+                    invalidate();
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (pressedGift != null) {
+                    pressedGift.bounce.setPressed(false);
+                    if (!rotatingGift) {
+                        onGiftClick(pressedGift);
+                    }
+                }
                 pressedGift = null;
-            }
-        } else if (event.getAction() == MotionEvent.ACTION_UP) {
-            if (pressedGift != null) {
-                onGiftClick(pressedGift);
-                pressedGift.bounce.setPressed(false);
+                rotatingGift = false;
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (pressedGift != null) {
+                    pressedGift.bounce.setPressed(false);
+                }
                 pressedGift = null;
-            }
-        } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
-            if (pressedGift != null) {
-                pressedGift.bounce.setPressed(false);
-                pressedGift = null;
-            }
+                rotatingGift = false;
+                return true;
         }
         return pressedGift != null;
     }
