@@ -8,17 +8,18 @@ import static org.telegram.ui.Stars.StarsController.findAttribute;
 import android.animation.TimeInterpolator;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Camera;
 import android.graphics.Matrix;
 import android.graphics.Path;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.SweepGradient;
 import android.graphics.Color;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ScaleGestureDetector;
 import android.view.ViewConfiguration;
 
 import androidx.core.graphics.ColorUtils;
@@ -73,6 +74,44 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         this.avatarImage = avatarImage;
 
         this.resourcesProvider = resourcesProvider;
+        bubbleFill.setStyle(Paint.Style.FILL);
+        bubbleFill.setShader(new RadialGradient(0, -dp(7), dp(43),
+                new int[]{0x55F8F3E8, 0x36D7E4E8, 0x20A9C7D8, 0x08FFFFFF},
+                new float[]{0f, 0.48f, 0.82f, 1f}, Shader.TileMode.CLAMP));
+        bubbleRim.setStyle(Paint.Style.STROKE);
+        bubbleRim.setStrokeWidth(dp(1.5f));
+        bubbleRim.setShader(new SweepGradient(0, 0, new int[]{
+                0xAFFFFFFF, 0x66A6F4FF, 0x77D7B8FF, 0x88FFE0B7,
+                0x66FFFFFF, 0x77A7DFFF, 0xAFFFFFFF
+        }, null));
+        bubbleGlint.setStyle(Paint.Style.STROKE);
+        bubbleGlint.setStrokeWidth(dp(2.1f));
+        bubbleGlint.setStrokeCap(Paint.Cap.ROUND);
+        bubbleGlint.setColor(0x88FFFFFF);
+        bubbleSoftLight.setStyle(Paint.Style.FILL);
+        bubbleSoftLight.setShader(new RadialGradient(-dp(13), -dp(13), dp(24),
+                new int[]{0x55FFFFFF, 0x18FFFFFF, 0x00FFFFFF}, null, Shader.TileMode.CLAMP));
+        scaleGestureDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScaleBegin(ScaleGestureDetector detector) {
+                if (pressedGift != null) pressedGift.bounce.setPressed(false);
+                pressedGift = null;
+                scalingGifts = gifts.size() > 0;
+                return scalingGifts;
+            }
+
+            @Override
+            public boolean onScale(ScaleGestureDetector detector) {
+                orbitScale = Math.max(0.62f, Math.min(1.75f, orbitScale * detector.getScaleFactor()));
+                invalidate();
+                return true;
+            }
+
+            @Override
+            public void onScaleEnd(ScaleGestureDetector detector) {
+                scalingGifts = false;
+            }
+        });
     }
 
     public float expandProgress, collapseProgress;
@@ -173,7 +212,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     private static final float TURN_DEG_PER_SEC = 40f;
-    private static final float CAMERA_DEPTH = 1.25f;
 
     /** One NFT to draw this frame, with its depth: the bigger, the closer to the viewer. */
     private static final class Render {
@@ -227,6 +265,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 vy[i] += accY * dt;
                 dx[i] = Math.max(-limit, Math.min(limit, dx[i] + vx[i] * dt));
                 dy[i] = Math.max(-limit, Math.min(limit, dy[i] + vy[i] * dt));
+            }
+        }
+
+        void reset() {
+            for (int i = 0; i < N; i++) {
+                dx[i] = 0f;
+                dy[i] = 0f;
+                vx[i] = 0f;
+                vy[i] = 0f;
             }
         }
 
@@ -290,17 +337,20 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public float accX, accY, prevVX, prevVY;
         public SoftBody soft = new SoftBody(dp(25));
         public final Path jellyPath = new Path();
-        public final Camera camera = new Camera();
-        public final Matrix tmpMatrix = new Matrix();
-        {
-            camera.setLocation(0f, 0f, -CAMERA_DEPTH);
-        }
+        // The 3D ball: a shaded sphere shader made once, and paints reused every frame.
+        public Shader bodyShader;
+        public final RectF bubbleRect = new RectF();
+        public final RectF bubbleInner = new RectF();
+        public final Paint bodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        public final Paint highlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         public Spring squash = new Spring(0f);
         public Spring dragSpring = new Spring(1f);
         public float dragScale = 1f;
         public float stretchX = 1f, stretchY = 1f;
         // 0..1 bass level of the playing music: makes the NFT jump.
         public float bass;
+        // False when the "Крутить NFT" switch is off: the NFT is drawn as the stock sticker in its place.
+        public boolean fancy = true;
         public final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         public final Paint bubbleRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         public final Paint bubblePatternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -376,6 +426,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             dragScale = b.dragScale;
         }
 
+        private Shader sphereShader(int c, float r) {
+            return new RadialGradient(-r * .38f, -r * .45f, r * 1.7f,
+                    new int[]{
+                            ColorUtils.blendARGB(c, Color.WHITE, .6f) | 0xFF000000,
+                            c | 0xFF000000,
+                            ColorUtils.blendARGB(c, Color.BLACK, .65f) | 0xFF000000},
+                    new float[]{0f, .55f, 1f}, Shader.TileMode.CLAMP);
+        }
+
         public void draw(
                 Canvas canvas,
                 float cx, float cy,
@@ -386,17 +445,25 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (alpha <= 0.0f) return;
             final float gsz = dp(45);
             bounds.set(cx - gsz / 2, cy - gsz / 2, cx + gsz / 2, cy + gsz / 2);
+            if (!fancy) {
+                // Stock look: just the NFT's own sticker in its place, no ball, no motion.
+                if (emojiDrawable != null) {
+                    final float s = ascale * bounce.getScale(0.1f);
+                    canvas.save();
+                    canvas.translate(cx, cy);
+                    canvas.scale(s, s);
+                    final int sz = dp(36);
+                    emojiDrawable.setBounds(-sz / 2, -sz / 2, sz / 2, sz / 2);
+                    emojiDrawable.setAlpha((int) (0xFF * alpha));
+                    emojiDrawable.draw(canvas);
+                    canvas.restore();
+                }
+                return;
+            }
+            final float scale = ascale * bounce.getScale(0.1f);
+            final float r = soft.radius;
             canvas.save();
             canvas.translate(cx, cy);
-            // Real 3D: the NFT is turned around its vertical axis and tilted, seen through a camera with perspective.
-            camera.save();
-            camera.rotateY(turnY);
-            camera.rotateX(tiltX);
-            camera.getMatrix(tmpMatrix);
-            camera.restore();
-            canvas.concat(tmpMatrix);
-            canvas.rotate(rotate);
-            final float scale = ascale * bounce.getScale(0.1f);
             canvas.scale(scale * stretchX, scale * stretchY);
             particles.process();
             particles.draw(canvas, color, alpha);
@@ -409,47 +476,36 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 canvas.drawRect(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f, gradientPaint);
             }
 
-            // The jelly drop: its body is tinted glass, its edge is bright and refracts the backdrop color inside.
-            soft.buildPath(jellyPath);
-            final float bubbleRadius = soft.radius;
-            final int bubbleTint = ColorUtils.setAlphaComponent(color, (int) (alpha * 105));
-            giftBubbleShader(bubblePaint, bubbleTint, bubbleRadius);
-            bubblePaint.setAlpha((int) (255 * alpha));
-            canvas.drawPath(jellyPath, bubblePaint);
-
+            // Pearlescent oval bubble. Turning in 3D narrows it on one side, so it reads as a volume.
+            final float flipX = Math.max(0.18f, (float) Math.abs(Math.cos(Math.toRadians(turnY))));
+            final float flipY = Math.max(0.6f, (float) Math.abs(Math.cos(Math.toRadians(tiltX))));
+            final float pulse = 1f + 0.10f * bass;
+            bubbleRect.set(-dp(23), -dp(23), dp(23), dp(23));
+            bubbleInner.set(-dp(19), -dp(18), dp(19), dp(18));
             canvas.save();
-            canvas.clipPath(jellyPath);
-            // Inner band of the backdrop color just inside the edge: the "refraction" of the liquid.
-            bubbleRimPaint.setStyle(Paint.Style.STROKE);
-            bubbleRimPaint.setStrokeWidth(dp(4f));
-            bubbleRimPaint.setColor(ColorUtils.setAlphaComponent(color, (int) (alpha * 110)));
-            canvas.drawPath(jellyPath, bubbleRimPaint);
-            // The NFT's own patterns, visible through the drop; they turn with it.
-            bubblePatternPaint.setStyle(Paint.Style.STROKE);
-            bubblePatternPaint.setStrokeWidth(dp(0.8f));
-            bubblePatternPaint.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 105)));
-            canvas.drawArc(-bubbleRadius * .72f, -bubbleRadius * .48f, bubbleRadius * .72f, bubbleRadius * .96f, 205, 235, false, bubblePatternPaint);
-            canvas.drawCircle(-bubbleRadius * .28f, bubbleRadius * .18f, dp(2.1f), bubblePatternPaint);
-            canvas.drawCircle(bubbleRadius * .34f, -bubbleRadius * .12f, dp(1.5f), bubblePatternPaint);
-            // Specular highlight of the wet surface.
-            bubblePaint.setShader(new RadialGradient(-bubbleRadius * .38f, -bubbleRadius * .48f, bubbleRadius * .72f,
-                    new int[]{ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 210)), ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 45)), Color.TRANSPARENT},
-                    new float[]{0f, .28f, 1f}, Shader.TileMode.CLAMP));
-            canvas.drawPath(jellyPath, bubblePaint);
-            bubblePaint.setShader(null);
+            canvas.scale(1.48f * pulse * flipX, 1.12f * 0.76f * pulse * flipY);
+            bubbleFill.setAlpha((int) (255f * alpha));
+            canvas.drawOval(bubbleRect, bubbleFill);
+            bubbleSoftLight.setAlpha((int) (230f * alpha));
+            canvas.drawOval(bubbleRect, bubbleSoftLight);
+            bubbleRim.setAlpha((int) (230f * alpha));
+            canvas.drawOval(bubbleRect, bubbleRim);
+            bubbleGlint.setAlpha((int) (210f * alpha));
+            canvas.drawArc(bubbleRect, 198f, 105f, false, bubbleGlint);
+            canvas.drawArc(bubbleInner, 18f, 62f, false, bubbleGlint);
             canvas.restore();
 
-            // Bright liquid edge.
-            bubbleRimPaint.setStyle(Paint.Style.STROKE);
-            bubbleRimPaint.setStrokeWidth(dp(1.4f));
-            bubbleRimPaint.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (alpha * 170)));
-            canvas.drawPath(jellyPath, bubbleRimPaint);
-
+            // The NFT's emoji turns like a card: its width follows the turn, so its side shows.
             if (emojiDrawable != null) {
+                canvas.save();
+                canvas.rotate(rotate);
+                final float flip = Math.max(0.12f, (float) Math.abs(Math.cos(Math.toRadians(turnY))));
+                canvas.scale(flip, 1f);
                 final int sz = dp(24);
                 emojiDrawable.setBounds(-sz / 2, -sz / 2, sz / 2, sz / 2);
                 emojiDrawable.setAlpha((int) (0xFF * alpha));
                 emojiDrawable.draw(canvas);
+                canvas.restore();
             }
             canvas.restore();
         }
@@ -595,6 +651,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final long now = SystemClock.uptimeMillis();
         final float dt = lastFrameTime == 0 ? 1f / 60f : Math.min(1f / 30f, (now - lastFrameTime) / 1000f);
         lastFrameTime = now;
+        // The "Крутить NFT" switch: on = 3D NFTs that move and can be turned, off = the stock look.
+        final boolean fancy = TrueGramIosDesign.isNftSpinEnabled();
 
         // Keep clear of the profile buttons and the music bar, wherever they are on screen right now.
         if (avoidProvider != null) {
@@ -608,7 +666,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
         // Bass of the music that is playing; no music, no jumps.
         final MediaController mc = MediaController.getInstance();
-        final boolean musicPlaying = mc.isPlayingMessage(mc.getPlayingMessageObject()) && !mc.isMessagePaused();
+        final boolean musicPlaying = fancy && mc.isPlayingMessage(mc.getPlayingMessageObject()) && !mc.isMessagePaused();
         if (musicPlaying) {
             bassMeter.start();
         } else {
@@ -641,7 +699,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         float closedAlpha = Utilities.clamp01((expandY - (AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight())) / dp(50));
 
         // Thin white orbit. Only the arc nearest each NFT gets a stronger, localized glow.
-        final float ringAlpha = (1f - expandProgress) * (1f - actionBarProgress) * closedAlpha;
+        final float ringAlpha = fancy ? (1f - expandProgress) * (1f - actionBarProgress) * closedAlpha : 0f;
         if (ringAlpha > 0f) {
             ringPaint.setStyle(Paint.Style.STROKE);
             ringPaint.setStrokeWidth(dp(1f));
@@ -711,14 +769,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (gift.orbitRadius < 0f) {
                 gift.orbitRadius = Math.max(realW, realH) / 2f + dp(34) + dp(7) * (gift.position % 2);
             }
-            final float orbitR = gift.orbitRadius + dp(10) * gift.bass;
+            final float orbitR = (gift.orbitRadius + dp(10) * gift.bass) * orbitScale;
             final double orbitRad = Math.toRadians(gift.orbitAngle);
             final float[] orbitPos = {realCX + orbitR * (float) Math.cos(orbitRad), realCY + orbitR * 0.82f * (float) Math.sin(orbitRad)};
             for (RectF r : avoidRects) {
                 pushOutOf(orbitPos, r, dp(20));
             }
-            gx = orbitPos[0];
-            gy = orbitPos[1];
+            if (fancy) {
+                gx = orbitPos[0];
+                gy = orbitPos[1];
+            }
 
             final float collapseProgressWithEnter;
             if (isOpening || enter >= 1f) {
@@ -740,9 +800,18 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 scale = AndroidUtilities.lerp(scale / 2f, scale, collapse);
             }
 
+            gift.fancy = fancy;
+            if (!fancy) {
+                // Stock look: everything goes back to rest, the NFT stays in its slot.
+                gift.targetOffX = 0f;
+                gift.targetOffY = 0f;
+                gift.targetTurnY = 0f;
+                gift.targetTurnX = 0f;
+                gift.soft.reset();
+            }
             // Physics: springs make the NFT lag, stretch, wobble and snap back like silicone.
             gift.bass += (audioLevel - gift.bass) * 0.35f;
-            if (!dragged) {
+            if (!dragged && fancy) {
                 gift.orbitAngle = (gift.orbitAngle + ORBIT_DEG_PER_SEC * dt) % 360f;
             }
             if (gift != pressedGift || !draggingGift) {
@@ -762,7 +831,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             gift.prevVY = gift.offSpringY.v;
             gift.soft.step(gift.accX, gift.accY, gift.bass, dt);
             // The 3D turn: the NFT keeps turning by itself; the finger adds to the turn and tilt.
-            if (!dragged) {
+            if (!dragged && fancy) {
                 gift.targetTurnY += TURN_DEG_PER_SEC * dt;
                 gift.targetTurnX *= 0.98f;
             }
@@ -809,6 +878,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private long lastFrameTime;
     private float audioLevel;
     private final ArrayList<RectF> avoidRects = new ArrayList<>();
+    // Pinch controls the orbit radius of the NFTs around the avatar.
+    private final ScaleGestureDetector scaleGestureDetector;
+    private float orbitScale = 1f;
+    private boolean scalingGifts;
+    // Pearlescent translucent oval bubble of the NFTs.
+    private final Paint bubbleFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bubbleRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bubbleGlint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bubbleSoftLight = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public Gift getGiftUnder(float x, float y) {
@@ -836,6 +914,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!active || gifts.isEmpty()) return false;
+        scaleGestureDetector.onTouchEvent(event);
+        if (scalingGifts) return true;
         if (touchSlop < 0) {
             touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         }
@@ -858,7 +938,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 // Empty-space gesture rotates the whole NFT constellation around the avatar.
                 float avatarX = avatarContainer.getX() + avatarContainer.getWidth() * avatarContainer.getScaleX() / 2f;
                 float avatarY = avatarContainer.getY() + avatarContainer.getHeight() * avatarContainer.getScaleY() / 2f;
-                if (Math.hypot(x - avatarX, y - avatarY) <= dp(132)) {
+                if (TrueGramIosDesign.isNftSpinEnabled() && Math.hypot(x - avatarX, y - avatarY) <= dp(132)) {
                     rotatingAll = true;
                     lastTouchAngle = (float) Math.toDegrees(Math.atan2(y - avatarY, x - avatarX));
                     if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -869,7 +949,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             case MotionEvent.ACTION_MOVE: {
                 if (pressedGift == null && !rotatingAll) return false;
                 if (pressedGift != null) {
-                    if (!draggingGift && Math.hypot(x - touchDownX, y - touchDownY) > touchSlop) {
+                    if (!draggingGift && TrueGramIosDesign.isNftSpinEnabled() && Math.hypot(x - touchDownX, y - touchDownY) > touchSlop) {
                         draggingGift = true;
                         rotatingGift = true;
                         pressedGift.bounce.setPressed(false);
@@ -999,7 +1079,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float dx = x - cx;
         final float dy = (y - cy) / 0.82f;
         gift.orbitAngle = (float) Math.toDegrees(Math.atan2(dy, dx)) - globalRotation;
-        gift.orbitRadius = Math.max(dp(40), (float) Math.hypot(dx, dy));
+        gift.orbitRadius = Math.max(dp(40), (float) Math.hypot(dx, dy) / orbitScale);
         gift.targetOffX = 0f;
         gift.targetOffY = 0f;
         gift.offSpringX.x = 0f;
