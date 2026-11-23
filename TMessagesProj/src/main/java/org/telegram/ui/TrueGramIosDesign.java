@@ -132,4 +132,12 @@ public final class TrueGramIosDesign {
         view.setBackground(glassDrawable(GradientDrawable.RECTANGLE, AndroidUtilities.dp(18)));
     }
 
+    /** Round translucent glass behind a header button. Does nothing when the switch is off. */
+    public static void styleCircle(View view) {
+        if (view == null || !isEnabled()) {
+            return;
+        }
+        view.setBackground(glassDrawable(GradientDrawable.OVAL, 0));
+    }
+
 }
