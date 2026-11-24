@@ -22,6 +22,7 @@ import org.telegram.ui.ActionBar.Theme;
 public final class TrueGramIosDesign {
 
     private static final String PREFS = "truegram";
+    private static final int GLASS_TAG_ID = 0x7f0e0ff1;
     private static final String KEY_ENABLED = "ios_design";
     private static final String KEY_NFT_SPIN = "nft_spin";
     private static final String KEY_PROFILE_MUSIC = "profile_music";
@@ -126,16 +127,23 @@ public final class TrueGramIosDesign {
      * Does nothing when the switch is off.
      */
     public static void stylePill(View view) {
-        if (view == null || !isEnabled()) {
-            return;
-        }
-        // Outline only: a clean glass edge around the row, the text and the fill stay untouched.
+        // Intentionally empty: per-row outlines made usernames and IDs look highlighted.
+        // The info block gets one glass card via glassCard() instead.
+    }
+
+    /** One translucent glass card for a whole block (profile info, composer island). */
+    public static GradientDrawable glassCard(float radiusPx) {
+        int base = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhite), TrueGramM3.primary(), 0.06f);
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
-        d.setCornerRadius(AndroidUtilities.dp(18));
-        d.setColor(0x00000000);
-        d.setStroke(AndroidUtilities.dp(1.5f), ColorUtils.setAlphaComponent(0xFFFFFFFF, 0x7A));
-        view.setBackground(d);
+        d.setCornerRadius(radiusPx);
+        d.setColors(new int[] {
+                ColorUtils.setAlphaComponent(base, 0xA0),
+                ColorUtils.setAlphaComponent(base, 0x78)
+        });
+        d.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+        d.setStroke(AndroidUtilities.dp(1), glassStrokeColor());
+        return d;
     }
 
     /** Round translucent glass behind a header button. Does nothing when the switch is off. */
@@ -143,7 +151,22 @@ public final class TrueGramIosDesign {
         if (view == null || !isEnabled()) {
             return;
         }
+        // Called every frame while the profile avatar expands: skip when the glass is already on,
+        // otherwise the header system would replace it and the button would look plain again.
+        if (Boolean.TRUE.equals(view.getTag(GLASS_TAG_ID))) {
+            return;
+        }
         view.setBackground(glassDrawable(GradientDrawable.OVAL, 0));
+        view.setTag(GLASS_TAG_ID, Boolean.TRUE);
+    }
+
+    /** Forces the glass back on a header button (after the system restyles it). */
+    public static void refreshCircle(View view) {
+        if (view == null) {
+            return;
+        }
+        view.setTag(GLASS_TAG_ID, null);
+        styleCircle(view);
     }
 
 }
