@@ -454,7 +454,8 @@ public class ProfileActionsView extends View {
         action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
         float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
         if (iosStyle()) {
-            drawableTop = action.rect.top + dp(4) + (iosCircleSize() - drawableSize) / 2f;
+            // iOS: icon sits at the top of the pill (y = 1), the label is at the bottom.
+            drawableTop = action.rect.top + dp(1);
         }
         action.setBounds(
             (int) (cx - drawableR),
@@ -498,23 +499,27 @@ public class ProfileActionsView extends View {
 
         float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
         if (iosStyle()) {
-            final float d = iosCircleSize();
-            final float circleCy = action.rect.top + dp(4) + d / 2f;
-            // Frosted glass: translucent tint, a light edge and a soft highlight at the top.
+            // iOS: a rounded pill (radius min(16, h/2)) holding the icon and the lowercase label.
+            final float pillTop = action.rect.top;
+            final float pillH = action.rect.height();
+            final float pillW = action.rect.width();
+            final android.graphics.RectF pill = new android.graphics.RectF(cx - pillW / 2f, pillTop, cx + pillW / 2f, pillTop + pillH);
+            final float radius = Math.min(dp(16), pillH * 0.5f);
             final int base = Theme.getColor(Theme.key_windowBackgroundWhite);
             iosFillPaint.setStyle(Paint.Style.FILL);
             iosFillPaint.setColor(TrueGramIosDesign.glassSurfaceColor(base));
             iosFillPaint.setAlpha((int) (255 * alpha));
-            canvas.drawCircle(cx, circleCy, d / 2f, iosFillPaint);
+            canvas.drawRoundRect(pill, radius, radius, iosFillPaint);
             iosFillPaint.setColor(TrueGramIosDesign.glassTintColor(base));
             iosFillPaint.setAlpha((int) (255 * alpha));
-            canvas.drawCircle(cx, circleCy, d / 2f, iosFillPaint);
+            canvas.drawRoundRect(pill, radius, radius, iosFillPaint);
             iosRimPaint.setStyle(Paint.Style.STROKE);
             iosRimPaint.setStrokeWidth(dp(1));
             iosRimPaint.setColor(TrueGramIosDesign.glassStrokeColor());
             iosRimPaint.setAlpha((int) (255 * alpha));
-            canvas.drawCircle(cx, circleCy, d / 2f - dp(0.5f), iosRimPaint);
-            textY = circleCy + d / 2f + dp(6);
+            canvas.drawRoundRect(pill, radius, radius, iosRimPaint);
+            // label: 9 dp above the bottom edge, as in iOS (size.height - titleSize - 9)
+            textY = pillTop + pillH - action.text.getHeight() * action.textScale - dp(9);
         }
         canvas.save();
         canvas.scale(action.textScale, action.textScale, cx, textY + action.text.getHeight() * action.textScale / 2.0f);
