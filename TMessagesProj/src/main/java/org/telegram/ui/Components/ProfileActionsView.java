@@ -440,7 +440,7 @@ public class ProfileActionsView extends View {
 
     /** Diameter of an iOS glass button. */
     private float iosCircleSize() {
-        return dp(50);
+        return dp(44);
     }
 
     private void updateBounds(Action action) {
