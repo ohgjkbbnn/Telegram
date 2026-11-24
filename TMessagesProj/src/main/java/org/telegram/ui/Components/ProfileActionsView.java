@@ -63,7 +63,6 @@ public class ProfileActionsView extends View {
     private final Paint shaderPaint = new Paint();
     private final Paint iosFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint iosRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint iosHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float parentExpanded;
 
     public boolean isAnimatingCallAction = false;
@@ -441,7 +440,7 @@ public class ProfileActionsView extends View {
 
     /** Diameter of an iOS glass button. */
     private float iosCircleSize() {
-        return dp(46);
+        return dp(44);
     }
 
     private void updateBounds(Action action) {
@@ -455,7 +454,8 @@ public class ProfileActionsView extends View {
         action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
         float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
         if (iosStyle()) {
-            drawableTop = action.rect.top + dp(4) + (iosCircleSize() - drawableSize) / 2f;
+            // iOS: icon sits at the top of the pill (y = 1), the label is at the bottom.
+            drawableTop = action.rect.top + dp(1);
         }
         action.setBounds(
             (int) (cx - drawableR),
@@ -479,11 +479,9 @@ public class ProfileActionsView extends View {
             useFilledWhiteIcon = 0f;
         }
 
-        final int textColor = iosStyle()
-                ? Color.WHITE
-                : TrueGramM3.isM3()
-                    ? getActionContentColor(action)
-                    : ColorUtils.blendARGB(Color.BLACK, Color.WHITE, useFilledWhiteIcon);
+        final int textColor = TrueGramM3.isM3()
+                ? getActionContentColor(action)
+                : ColorUtils.blendARGB(Color.BLACK, Color.WHITE, useFilledWhiteIcon);
         if (lastColorFilter == null || lastColorFilterColor != textColor) {
             lastColorFilterColor = textColor;
             lastColorFilter = new PorterDuffColorFilter(textColor, PorterDuff.Mode.SRC_IN);
@@ -501,37 +499,28 @@ public class ProfileActionsView extends View {
 
         float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
         if (iosStyle()) {
-            final float d = iosCircleSize();
-            final float circleCy = action.rect.top + dp(4) + d / 2f;
-            // Frosted glass: translucent tint, a light edge and a soft highlight at the top.
-            final boolean prominent = action.key == KEY_MESSAGE || action.key == KEY_JOIN;
-            final int accent = color != 0 ? color : Theme.getColor(Theme.key_actionBarDefault);
-
-            // Soft shadow separates the glass controls from the blurred profile cover.
+            // iOS: a rounded pill (radius min(16, h/2)) holding the icon and the lowercase label.
+            final float pillTop = action.rect.top;
+            final float pillH = action.rect.height();
+            final float pillW = action.rect.width();
+            final android.graphics.RectF pill = new android.graphics.RectF(cx - pillW / 2f, pillTop, cx + pillW / 2f, pillTop + pillH);
+            // capsule: fully rounded ends, like the iOS action buttons
+            final float radius = pillH * 0.5f;
+            final int base = Theme.getColor(Theme.key_windowBackgroundWhite);
             iosFillPaint.setStyle(Paint.Style.FILL);
-            iosFillPaint.setColor(0x26000000);
-            iosFillPaint.setAlpha((int) (0x26 * alpha));
-            iosFillPaint.setShadowLayer(dp(3), 0, dp(1.5f), 0x26000000);
-            canvas.drawCircle(cx, circleCy + dp(0.5f), d / 2f, iosFillPaint);
-            iosFillPaint.clearShadowLayer();
-
-            // iOS Profile V2 uses a saturated primary action and softer accent glass
-            // for the remaining controls; all colors follow the profile's own palette.
-            iosFillPaint.setColor(TrueGramIosDesign.glassActionFillColor(accent, prominent));
+            iosFillPaint.setColor(TrueGramIosDesign.glassSurfaceColor(base));
             iosFillPaint.setAlpha((int) (255 * alpha));
-            canvas.drawCircle(cx, circleCy, d / 2f, iosFillPaint);
-
-            iosHighlightPaint.setStyle(Paint.Style.FILL);
-            iosHighlightPaint.setColor(TrueGramIosDesign.glassActionHighlightColor());
-            iosHighlightPaint.setAlpha((int) (255 * alpha));
-            canvas.drawOval(cx - d * 0.39f, circleCy - d * 0.39f, cx + d * 0.39f, circleCy - d * 0.03f, iosHighlightPaint);
-
+            canvas.drawRoundRect(pill, radius, radius, iosFillPaint);
+            iosFillPaint.setColor(TrueGramIosDesign.glassTintColor(base));
+            iosFillPaint.setAlpha((int) (255 * alpha));
+            canvas.drawRoundRect(pill, radius, radius, iosFillPaint);
             iosRimPaint.setStyle(Paint.Style.STROKE);
             iosRimPaint.setStrokeWidth(dp(1));
-            iosRimPaint.setColor(TrueGramIosDesign.glassActionStrokeColor(accent));
+            iosRimPaint.setColor(TrueGramIosDesign.glassStrokeColor());
             iosRimPaint.setAlpha((int) (255 * alpha));
-            canvas.drawCircle(cx, circleCy, d / 2f - dp(0.5f), iosRimPaint);
-            textY = circleCy + d / 2f + dp(5);
+            canvas.drawRoundRect(pill, radius, radius, iosRimPaint);
+            // label: 9 dp above the bottom edge, as in iOS (size.height - titleSize - 9)
+            textY = pillTop + pillH - action.text.getHeight() * action.textScale - dp(9);
         }
         canvas.save();
         canvas.scale(action.textScale, action.textScale, cx, textY + action.text.getHeight() * action.textScale / 2.0f);
@@ -555,6 +544,10 @@ public class ProfileActionsView extends View {
                 } else {
                     drawActionDrawable(canvas, action.drawableAnimated, alpha);
                 }
+            } else if (iosStyle()) {
+                // iOS pill: draw exactly one icon. Drawing both the outline and the filled glyph
+                // on top of each other made the icons look like blurry white blobs.
+                drawActionDrawable(canvas, useFilledWhiteIcon > 0.5f ? action.drawableFilled : action.drawableOutline, alpha);
             } else {
                 drawActionDrawable(canvas, action.drawableOutline, outlineAlpha);
                 drawActionDrawable(canvas, action.drawableFilled, filledAlpha);
