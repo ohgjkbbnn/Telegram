@@ -22,7 +22,6 @@ import org.telegram.ui.ActionBar.Theme;
 public final class TrueGramIosDesign {
 
     private static final String PREFS = "truegram";
-    private static final int GLASS_TAG_ID = 0x7f0e0ff1;
     private static final String KEY_ENABLED = "ios_design";
     private static final String KEY_NFT_SPIN = "nft_spin";
     private static final String KEY_PROFILE_MUSIC = "profile_music";
@@ -105,6 +104,34 @@ public final class TrueGramIosDesign {
         return ColorUtils.setAlphaComponent(tinted, 0x72);
     }
 
+    /**
+     * Profile V2 action button fill. The profile accent is deliberately retained
+     * instead of replacing it with the app-wide accent, so custom profile colors
+     * continue to tint the action row just like the iOS profile header.
+     */
+    public static int glassActionFillColor(int profileColor, boolean prominent) {
+        int fallback = Theme.getColor(Theme.key_actionBarDefault);
+        int accent = profileColor != 0 ? (profileColor | 0xFF000000) : (fallback | 0xFF000000);
+        if (prominent) {
+            int target = Theme.isCurrentThemeDark() ? Color.WHITE : Color.BLACK;
+            return ColorUtils.setAlphaComponent(ColorUtils.blendARGB(accent, target, Theme.isCurrentThemeDark() ? 0.10f : 0.04f), 0xE8);
+        }
+        int surface = Theme.isCurrentThemeDark() ? Color.WHITE : Color.BLACK;
+        return ColorUtils.setAlphaComponent(ColorUtils.blendARGB(accent, surface, Theme.isCurrentThemeDark() ? 0.12f : 0.07f), 0xA8);
+    }
+
+    /** Thin bright edge around the round Profile V2 action buttons. */
+    public static int glassActionStrokeColor(int profileColor) {
+        int accent = profileColor != 0 ? (profileColor | 0xFF000000) : Theme.getColor(Theme.key_actionBarDefault);
+        int edge = ColorUtils.blendARGB(accent, Color.WHITE, 0.58f);
+        return ColorUtils.setAlphaComponent(edge, Theme.isCurrentThemeDark() ? 0xB8 : 0xD8);
+    }
+
+    /** Small top reflection used to give the action circles a glass-like finish. */
+    public static int glassActionHighlightColor() {
+        return ColorUtils.setAlphaComponent(Color.WHITE, Theme.isCurrentThemeDark() ? 0x38 : 0x52);
+    }
+
     /** Translucent glass background: base colour at ~70% alpha with a faint light edge. */
     private static GradientDrawable glassDrawable(int shape, float radiusPx) {
         int base = ColorUtils.blendARGB(Theme.getColor(Theme.key_actionBarDefault), TrueGramM3.primary(), 0.08f);
@@ -127,23 +154,24 @@ public final class TrueGramIosDesign {
      * Does nothing when the switch is off.
      */
     public static void stylePill(View view) {
-        // Intentionally empty: per-row outlines made usernames and IDs look highlighted.
-        // The info block gets one glass card via glassCard() instead.
-    }
-
-    /** One translucent glass card for a whole block (profile info, composer island). */
-    public static GradientDrawable glassCard(float radiusPx) {
-        int base = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhite), TrueGramM3.primary(), 0.06f);
-        GradientDrawable d = new GradientDrawable();
+        if (view == null || !isEnabled()) {
+            return;
+        }
+        // Translucent grouped row used by the new profile information cards.
+        int base = ColorUtils.blendARGB(
+                Theme.getColor(Theme.key_windowBackgroundWhite) | 0xFF000000,
+                TrueGramM3.primary(), 0.10f);
+        GradientDrawable d = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {
+                        ColorUtils.setAlphaComponent(base, Theme.isCurrentThemeDark() ? 0x68 : 0x88),
+                        ColorUtils.setAlphaComponent(base, Theme.isCurrentThemeDark() ? 0x50 : 0x70)
+                });
         d.setShape(GradientDrawable.RECTANGLE);
-        d.setCornerRadius(radiusPx);
-        d.setColors(new int[] {
-                ColorUtils.setAlphaComponent(base, 0xA0),
-                ColorUtils.setAlphaComponent(base, 0x78)
-        });
-        d.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-        d.setStroke(AndroidUtilities.dp(1), glassStrokeColor());
-        return d;
+        d.setCornerRadius(AndroidUtilities.dp(17));
+        d.setStroke(AndroidUtilities.dp(1), ColorUtils.setAlphaComponent(
+                Color.WHITE, Theme.isCurrentThemeDark() ? 0x58 : 0xA0));
+        view.setBackground(d);
     }
 
     /** Round translucent glass behind a header button. Does nothing when the switch is off. */
@@ -151,22 +179,7 @@ public final class TrueGramIosDesign {
         if (view == null || !isEnabled()) {
             return;
         }
-        // Called every frame while the profile avatar expands: skip when the glass is already on,
-        // otherwise the header system would replace it and the button would look plain again.
-        if (Boolean.TRUE.equals(view.getTag(GLASS_TAG_ID))) {
-            return;
-        }
         view.setBackground(glassDrawable(GradientDrawable.OVAL, 0));
-        view.setTag(GLASS_TAG_ID, Boolean.TRUE);
-    }
-
-    /** Forces the glass back on a header button (after the system restyles it). */
-    public static void refreshCircle(View view) {
-        if (view == null) {
-            return;
-        }
-        view.setTag(GLASS_TAG_ID, null);
-        styleCircle(view);
     }
 
 }
