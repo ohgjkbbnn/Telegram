@@ -8,6 +8,7 @@ import static org.telegram.ui.Stars.StarsController.findAttribute;
 import android.animation.TimeInterpolator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Camera;
 import android.graphics.Matrix;
 import android.graphics.Path;
 import android.graphics.Paint;
@@ -339,6 +340,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public final Path jellyPath = new Path();
         // The 3D ball: a shaded sphere shader made once, and paints reused every frame.
         public Shader bodyShader;
+        // Real 3D: the NFT is turned through a camera with perspective (Camera distances are in inches).
+        public final Camera camera = new Camera();
+        public final Matrix turnMatrix = new Matrix();
+        {
+            camera.setLocation(0f, 0f, -4f);
+        }
         public final RectF bubbleRect = new RectF();
         public final RectF bubbleInner = new RectF();
         public final Paint bodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -487,13 +494,18 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
 
             // Pearlescent oval bubble. Turning in 3D narrows it on one side, so it reads as a volume.
-            final float flipX = Math.max(0.18f, (float) Math.abs(Math.cos(Math.toRadians(turnY))));
-            final float flipY = Math.max(0.6f, (float) Math.abs(Math.cos(Math.toRadians(tiltX))));
             final float pulse = 1f + 0.10f * bass;
             bubbleRect.set(-dp(23), -dp(23), dp(23), dp(23));
             bubbleInner.set(-dp(19), -dp(18), dp(19), dp(18));
+            // The whole NFT turns in 3D: the bubble and the sticker share one perspective turn around its center.
+            camera.save();
+            camera.rotateY(turnY);
+            camera.rotateX(tiltX);
+            camera.getMatrix(turnMatrix);
+            camera.restore();
             canvas.save();
-            canvas.scale(1.48f * pulse * flipX, 1.12f * 0.76f * pulse * flipY);
+            canvas.concat(turnMatrix);
+            canvas.scale(1.48f * pulse, 1.12f * 0.76f * pulse);
             bubbleFill.setAlpha((int) (255f * alpha));
             canvas.drawOval(bubbleRect, bubbleFill);
             bubbleSoftLight.setAlpha((int) (230f * alpha));
@@ -509,8 +521,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (emojiDrawable != null) {
                 canvas.save();
                 canvas.rotate(rotate);
-                final float flip = Math.max(0.12f, (float) Math.abs(Math.cos(Math.toRadians(turnY))));
-                canvas.scale(flip, 1f);
+                canvas.concat(turnMatrix);
                 final int sz = dp(24);
                 emojiDrawable.setBounds(-sz / 2, -sz / 2, sz / 2, sz / 2);
                 emojiDrawable.setAlpha((int) (0xFF * alpha));
