@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
 import android.view.View;
 
 import androidx.core.graphics.ColorUtils;
@@ -130,9 +129,13 @@ public final class TrueGramIosDesign {
         if (view == null || !isEnabled()) {
             return;
         }
-        // Inset vertically, so neighbouring rows read as separate glass pills instead of one merged block.
-        final int inset = AndroidUtilities.dp(4);
-        view.setBackground(new InsetDrawable(glassDrawable(GradientDrawable.RECTANGLE, AndroidUtilities.dp(18)), 0, inset, 0, inset));
+        // Outline only: a clean glass edge around the row, the text and the fill stay untouched.
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setCornerRadius(AndroidUtilities.dp(18));
+        d.setColor(0x00000000);
+        d.setStroke(AndroidUtilities.dp(1.5f), ColorUtils.setAlphaComponent(0xFFFFFFFF, 0x7A));
+        view.setBackground(d);
     }
 
     /** Round translucent glass behind a header button. Does nothing when the switch is off. */
